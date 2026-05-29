@@ -1,17 +1,34 @@
-# This is a sample Python script.
+from datetime import date
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+import pandas as pd
+
+from DataConnectors import DataConnectors
+
+TICKERS = [
+    "XLV", "XLP", "XLU", "XLE", "XLB", "XLI", "XLY", "XLF", "XLRE", "XLK",
+    "SMH", "SPHQ", "MTUM", "USMV", "VLUE", "IWM", "SCHD", "VOO",
+]
+
+START = date(2021, 1, 1)
+END = date(2026, 5, 29)
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
+def fetch_monthly_adj_close() -> pd.DataFrame:
+    yf = DataConnectors.yahoo_finance()
+    yf.connect()
+
+    data: dict[str, dict[date, float]] = {}
+    for ticker in TICKERS:
+        records = yf.fetch_ohlcv(ticker, start=START, end=END, interval="1mo")
+        data[ticker] = {rec.date: rec.adj_close for rec in records}
+
+    df = pd.DataFrame(data)
+    df.index.name = "date"
+    df.sort_index(inplace=True)
+    return df
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm on GitHub.com')
-
-    print("hello from branch, it merged successfully")
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+if __name__ == "__main__":
+    df = fetch_monthly_adj_close()
+    df.to_csv("etf_mon_data.csv")
+    print(df.to_string())

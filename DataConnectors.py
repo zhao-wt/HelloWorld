@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
 import os
@@ -15,6 +15,7 @@ class OHLCVRecord:
     low: float
     close: float
     volume: int
+    adj_close: Optional[float] = field(default=None)
 
 
 @dataclass
@@ -72,7 +73,22 @@ class YahooFinanceConnector(DataConnector):
         self, symbol: str, start: date, end: date, interval: str = "1d"
     ) -> list[OHLCVRecord]:
         """OHLCV bars. interval: 1m 2m 5m 15m 30m 60m 90m 1h 1d 5d 1wk 1mo 3mo"""
-        ...
+        import yfinance as yf
+        df = yf.Ticker(symbol).history(
+            start=start, end=end, interval=interval, auto_adjust=True
+        )
+        return [
+            OHLCVRecord(
+                date=ts.date(),
+                open=float(row["Open"]),
+                high=float(row["High"]),
+                low=float(row["Low"]),
+                close=float(row["Close"]),
+                volume=int(row["Volume"]),
+                adj_close=float(row["Close"]),  # auto_adjust=True: Close == Adj Close
+            )
+            for ts, row in df.iterrows()
+        ]
 
     def fetch_quote(self, symbol: str) -> dict[str, Any]:
         """Real-time bid/ask/last/volume snapshot."""

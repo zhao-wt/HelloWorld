@@ -1,11 +1,12 @@
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="U.S. Leading Indicators", layout="wide")
+st.set_page_config(page_title="Piney Woods Advisory", layout="wide")
 
 INDICATORS: list[dict[str, Any]] = [
     {
@@ -172,6 +173,13 @@ INDICATORS: list[dict[str, Any]] = [
 
 INDICATOR_BY_NAME = {item["name"]: item for item in INDICATORS}
 
+SHILLER_CAPE_URL = (
+    "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/"
+    "downloads/441f0d2c-37e4-4803-b4e2-8fe10407fbf6/ie_data.xls"
+)
+SHILLER_CAPE_LOCAL_PATH = Path(__file__).resolve().parent / "data" / "shiller_ie_data.xls"
+LOGO_PATH = Path(__file__).resolve().parent / "assets" / "piney-woods-logo.png"
+
 CYCLE_STAGES = ("Early", "Mid", "Late", "Recession")
 STAGE_COLORS = {
     "Early": "#22c55e",
@@ -296,30 +304,51 @@ def fetch_observations_series(
     return pd.Series(values, index=dates).sort_index()
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def fetch_shiller_cape_series() -> pd.Series:
-    import io
+def ensure_local_shiller_file() -> Path:
     import requests
 
     resp = requests.get(
-        "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/441f0d2c-37e4-4803-b4e2-8fe10407fbf6/ie_data.xls",
-        timeout=30,
+        SHILLER_CAPE_URL,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=60,
     )
     resp.raise_for_status()
-    df = pd.read_excel(io.BytesIO(resp.content), sheet_name="Data", header=6)
+    remote_bytes = resp.content
+
+    if SHILLER_CAPE_LOCAL_PATH.exists():
+        local_bytes = SHILLER_CAPE_LOCAL_PATH.read_bytes()
+        if local_bytes == remote_bytes:
+            return SHILLER_CAPE_LOCAL_PATH
+
+    SHILLER_CAPE_LOCAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SHILLER_CAPE_LOCAL_PATH.write_bytes(remote_bytes)
+    return SHILLER_CAPE_LOCAL_PATH
+
+
+def fetch_shiller_cape_series() -> pd.Series:
+    source_path = ensure_local_shiller_file()
+    df = pd.read_excel(source_path, sheet_name="Data", header=6)
     date_col = df.columns[0]
-    cape_col = "P/E10 or"
+    cape_candidates = ["P/E10 or", "P/E10", "CAPE"]
+    cape_col = next((col for col in cape_candidates if col in df.columns), None)
     if cape_col not in df.columns:
         raise ValueError("Shiller CAPE column not found in source file")
+
     def _decimal_year_to_timestamp(year_value: float) -> pd.Timestamp:
         year = int(year_value)
         month = int(round((year_value - year) * 100))
         month = min(max(month, 1), 12)
         return pd.Timestamp(year=year, month=month, day=1)
 
-    rows = df[df[date_col].apply(lambda x: isinstance(x, (int, float)) and 1900 < x < 2030)]
-    dates = rows[date_col].apply(_decimal_year_to_timestamp)
-    series = pd.Series(rows[cape_col].astype(float).values, index=dates).sort_index()
+    numeric_dates = pd.to_numeric(df[date_col], errors="coerce")
+    numeric_cape = pd.to_numeric(df[cape_col], errors="coerce")
+    rows = df[numeric_dates.between(1900, 2030) & numeric_cape.notna()]
+    numeric_dates = numeric_dates.loc[rows.index]
+    numeric_cape = numeric_cape.loc[rows.index]
+    dates = numeric_dates.apply(_decimal_year_to_timestamp)
+    series = pd.Series(numeric_cape.astype(float).values, index=dates, name="Value")
+    series.index.name = "Date"
+    series = series.sort_index()
     return series.dropna()
 
 
@@ -820,133 +849,361 @@ def build_reference_table() -> pd.DataFrame:
     )
 
 
-st.title("U.S. Leading Indicators Dashboard")
-st.caption(
-    "Monitor key macro and market indicators that tend to move ahead of the business cycle."
+def render_app_styles() -> None:
+    st.markdown(
+        """
+        <style>
+          :root {
+            --pwa-ink: #18211b;
+            --pwa-muted: #5d675f;
+            --pwa-line: #dce3dd;
+            --pwa-green: #173f2a;
+            --pwa-green-2: #24563a;
+            --pwa-gold: #b68a35;
+            --pwa-bg: #f7f8f6;
+          }
+          .main .block-container {
+            max-width: 1240px;
+            padding-top: 1.5rem;
+            padding-bottom: 3rem;
+          }
+          h1, h2, h3 {
+            color: var(--pwa-ink);
+            letter-spacing: 0;
+          }
+          div[data-testid="stTabs"] button {
+            font-weight: 650;
+            color: var(--pwa-muted);
+          }
+          div[data-testid="stTabs"] button[aria-selected="true"] {
+            color: var(--pwa-green);
+            border-bottom-color: var(--pwa-gold);
+          }
+          .pwa-header {
+            border: 1px solid var(--pwa-line);
+            border-radius: 8px;
+            padding: 1.1rem 1.25rem;
+            background: linear-gradient(135deg, #ffffff 0%, var(--pwa-bg) 100%);
+            margin-bottom: 1rem;
+          }
+          .pwa-kicker {
+            color: var(--pwa-gold);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+          }
+          .pwa-title {
+            color: var(--pwa-ink);
+            font-size: 2.15rem;
+            font-weight: 760;
+            line-height: 1.08;
+            margin: 0;
+          }
+          .pwa-subtitle {
+            color: var(--pwa-muted);
+            font-size: 0.98rem;
+            margin-top: 0.45rem;
+            max-width: 780px;
+          }
+          .pwa-asof {
+            color: var(--pwa-muted);
+            font-size: 0.86rem;
+            text-align: right;
+            margin-top: 0.35rem;
+          }
+          .pwa-section {
+            border-top: 1px solid var(--pwa-line);
+            padding-top: 1rem;
+            margin-top: 1.25rem;
+          }
+          .pwa-section h3 {
+            margin-bottom: 0.15rem;
+          }
+          .pwa-section p {
+            color: var(--pwa-muted);
+            margin-top: 0;
+          }
+          .pwa-panel {
+            border: 1px solid var(--pwa-line);
+            border-radius: 8px;
+            padding: 1rem 1.15rem;
+            background: #ffffff;
+          }
+          .pwa-panel-title {
+            color: var(--pwa-ink);
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+          }
+          .pwa-panel-copy {
+            color: var(--pwa-muted);
+            margin: 0;
+          }
+          div[data-testid="stMetric"] {
+            border: 1px solid var(--pwa-line);
+            border-radius: 8px;
+            padding: 0.85rem 0.9rem;
+            background: #ffffff;
+          }
+          div[data-testid="stMetricLabel"] p {
+            color: var(--pwa-muted);
+            font-size: 0.84rem;
+          }
+          table td, table th {
+            border-color: var(--pwa-line) !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_section_header(title: str, caption: str) -> None:
+    st.markdown(
+        f"""
+        <div class="pwa-section">
+          <h3>{title}</h3>
+          <p>{caption}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_panel(title: str, copy: str) -> None:
+    st.markdown(
+        f"""
+        <div class="pwa-panel">
+          <div class="pwa-panel-title">{title}</div>
+          <p class="pwa-panel-copy">{copy}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+render_app_styles()
+
+header_logo, header_title = st.columns([1, 7], vertical_alignment="center")
+with header_logo:
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=104)
+with header_title:
+    st.markdown(
+        f"""
+        <div class="pwa-header">
+          <div class="pwa-kicker">Investment Regime Dashboard</div>
+          <div class="pwa-title">Piney Woods Advisory, all rights reserved.</div>
+          <div class="pwa-subtitle">
+            A disciplined view of macro cycle conditions, valuation, credit, labor,
+            housing, sentiment, and market trend indicators.
+          </div>
+          <div class="pwa-asof">
+            As of {datetime.today().strftime("%B %d, %Y").replace(" 0", " ")}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+cycle_tab, allocation_tab, performance_tab = st.tabs(
+    ["Cycle Stage Monitor", "Conditional Asset Allocation", "Historical Performance"]
 )
 
-api_key = get_fred_api_key()
-if not api_key:
-    st.warning(
-        "Set a **FRED API key** to load latest data and charts. "
-        "Use environment variable `FRED_API_KEY` or Streamlit secrets "
-        "(`FRED_API_KEY` or `fred.api_key`). "
-        "Get a free key at https://fred.stlouisfed.org/docs/api/api_key.html"
+with cycle_tab:
+    api_key = get_fred_api_key()
+    if not api_key:
+        st.warning(
+            "Set a **FRED API key** to load latest data and charts. "
+            "Use environment variable `FRED_API_KEY` or Streamlit secrets "
+            "(`FRED_API_KEY` or `fred.api_key`). "
+            "Get a free key at https://fred.stlouisfed.org/docs/api/api_key.html"
+        )
+    else:
+        render_section_header(
+            "Cycle Stage Snapshot",
+            (
+                "Observation date is the period the value refers to. Publication date "
+                "is when FRED first published that vintage. Cycle stage is a heuristic "
+                "read from each series' level and recent momentum."
+            ),
+        )
+        with st.spinner("Loading latest readings from FRED…"):
+            snapshot = build_latest_snapshot_table(api_key)
+
+        stage_counts = snapshot["Cycle stage"].value_counts()
+        early_count = int(stage_counts.get("Early", 0))
+        mid_count = int(stage_counts.get("Mid", 0))
+        late_count = int(stage_counts.get("Late", 0))
+        recession_count = int(stage_counts.get("Recession", 0))
+        breadth_cols = st.columns(4)
+        breadth_cols[0].metric("Early", early_count)
+        breadth_cols[1].metric("Mid", mid_count)
+        breadth_cols[2].metric("Late", late_count)
+        breadth_cols[3].metric("Recession", recession_count)
+
+        render_colored_snapshot_table(snapshot)
+        legend_html = " ".join(
+            f'<span style="background:{STAGE_COLORS[stage]};color:white;'
+            f'padding:0.2rem 0.6rem;border-radius:0.25rem;margin-right:0.5rem;">'
+            f"{stage}</span>"
+            for stage in CYCLE_STAGES
+        )
+        st.markdown(legend_html, unsafe_allow_html=True)
+
+    render_section_header(
+        "Indicator Library",
+        "Reference set used by the cycle monitor, grouped by macro and market channel.",
     )
-else:
-    st.subheader("Latest data")
-    st.caption(
-        "Observation date is the period the value refers to. "
-        "Publication date is when FRED first published that vintage. "
-        "Cycle stage is a heuristic read (Early / Mid / Late / Recession) from each "
-        "series' level and recent momentum—not an official NBER classification."
+    st.dataframe(
+        build_reference_table(),
+        column_config={
+            "Source": st.column_config.LinkColumn("Source", display_text="FRED ↗"),
+        },
+        hide_index=True,
+        use_container_width=True,
     )
-    with st.spinner("Loading latest readings from FRED…"):
-        snapshot = build_latest_snapshot_table(api_key)
-    render_colored_snapshot_table(snapshot)
-    legend_html = " ".join(
-        f'<span style="background:{STAGE_COLORS[stage]};color:white;'
-        f'padding:0.2rem 0.6rem;border-radius:0.25rem;margin-right:0.5rem;">'
-        f"{stage}</span>"
-        for stage in CYCLE_STAGES
+
+    render_section_header(
+        "Indicator Drilldown",
+        "Select a series to review its latest reading, history, and interpretation.",
     )
-    st.markdown(legend_html, unsafe_allow_html=True)
 
-st.subheader("Indicator reference")
-st.dataframe(
-    build_reference_table(),
-    column_config={
-        "Source": st.column_config.LinkColumn("Source", display_text="FRED ↗"),
-    },
-    hide_index=True,
-    use_container_width=True,
-)
+    select_col, context_col = st.columns([1, 2], vertical_alignment="top")
+    with select_col:
+        selected_name = st.selectbox(
+            "Select indicator",
+            options=[item["name"] for item in INDICATORS],
+        )
 
-st.divider()
-st.subheader("Explore an indicator")
+    selected = INDICATOR_BY_NAME[selected_name]
+    with context_col:
+        render_panel(
+            selected["category"],
+            f"{selected['description']} Source: {selected['source_url']}",
+        )
 
-selected_name = st.selectbox(
-    "Select indicator",
-    options=[item["name"] for item in INDICATORS],
-)
+    if api_key:
+        try:
+            series = compute_indicator_series(selected, api_key)
+        except Exception as exc:
+            st.error(f"Could not load {selected['name']}: {exc}")
+            st.stop()
 
-selected = INDICATOR_BY_NAME[selected_name]
-st.markdown(f"**Category:** {selected['category']}")
-st.markdown(selected["description"])
-st.markdown(f"[View source]({selected['source_url']})")
+        if series.empty:
+            st.error("No data returned for this series.")
+            st.stop()
 
-if api_key:
-    try:
-        series = compute_indicator_series(selected, api_key)
-    except Exception as exc:
-        st.error(f"Could not load {selected['name']}: {exc}")
-        st.stop()
-
-    if series.empty:
-        st.error("No data returned for this series.")
-        st.stop()
-
-    try:
-        latest = fetch_indicator_latest(selected, api_key)
-    except Exception as exc:
-        st.warning(f"Could not load publication metadata: {exc}")
-        latest = {
-            "value": float(series.iloc[-1]),
-            "observation_date": pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
-            "publication_date": pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
-        }
-
-    stage = classify_cycle_stage(indicator_stage_key(selected), series)
-
-    st.subheader("Latest reading")
-    latest_row = pd.DataFrame(
-        [
-            {
-                "Indicator": selected["name"],
-                "FRED series ID": selected["fred_id"],
-                "Latest value": format_value(latest["value"], selected["format"]),
-                "Observation date": format_date(latest["observation_date"]),
-                "Publication date": format_date(latest["publication_date"]),
-                "Median": "—",
-                "10th pct": "—",
-                "90th pct": "—",
-                "Cycle stage": stage,
+        try:
+            latest = fetch_indicator_latest(selected, api_key)
+        except Exception as exc:
+            st.warning(f"Could not load publication metadata: {exc}")
+            latest = {
+                "value": float(series.iloc[-1]),
+                "observation_date": pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
+                "publication_date": pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
             }
-        ]
-    )
-    try:
-        hist_for_stats = fetch_indicator_history_for_stats(selected, api_key)
-        med, p10, p90 = _quantiles(hist_for_stats)
-        latest_row.loc[0, "Median"] = format_value(med, selected["format"])
-        latest_row.loc[0, "10th pct"] = format_value(p10, selected["format"])
-        latest_row.loc[0, "90th pct"] = format_value(p90, selected["format"])
-    except Exception:
-        pass
-    render_colored_snapshot_table(latest_row)
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Latest value", format_value(latest["value"], selected["format"]))
-    col2.metric(
-        "Observation date",
-        format_date(latest["observation_date"]),
-        help="The period this data point refers to.",
-    )
-    col3.metric(
-        "Publication date",
-        format_date(latest["publication_date"]),
-        help="When FRED first published this vintage of the reading.",
-    )
-    col4.metric(
-        "Cycle stage",
-        stage,
-        help="Heuristic early / mid / late / recession signal for this indicator.",
-    )
+        stage = classify_cycle_stage(indicator_stage_key(selected), series)
 
-    chart_df = series.rename("value").to_frame()
-    chart_df.index = pd.to_datetime(chart_df.index)
-    st.line_chart(chart_df, use_container_width=True)
+        render_section_header(
+            "Latest Reading",
+            "Current value, vintage date, distribution context, and cycle classification.",
+        )
+        latest_row = pd.DataFrame(
+            [
+                {
+                    "Indicator": selected["name"],
+                    "FRED series ID": selected["fred_id"],
+                    "Latest value": format_value(latest["value"], selected["format"]),
+                    "Observation date": format_date(latest["observation_date"]),
+                    "Publication date": format_date(latest["publication_date"]),
+                    "Median": "—",
+                    "10th pct": "—",
+                    "90th pct": "—",
+                    "Cycle stage": stage,
+                }
+            ]
+        )
+        try:
+            hist_for_stats = fetch_indicator_history_for_stats(selected, api_key)
+            med, p10, p90 = _quantiles(hist_for_stats)
+            latest_row.loc[0, "Median"] = format_value(med, selected["format"])
+            latest_row.loc[0, "10th pct"] = format_value(p10, selected["format"])
+            latest_row.loc[0, "90th pct"] = format_value(p90, selected["format"])
+        except Exception:
+            pass
+        render_colored_snapshot_table(latest_row)
 
-    st.markdown("#### Interpretation")
-    st.markdown(interpret_indicator(selected, series))
-else:
-    st.info("Charts and metrics appear once a FRED API key is configured.")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Latest value", format_value(latest["value"], selected["format"]))
+        col2.metric(
+            "Observation date",
+            format_date(latest["observation_date"]),
+            help="The period this data point refers to.",
+        )
+        col3.metric(
+            "Publication date",
+            format_date(latest["publication_date"]),
+            help="When FRED first published this vintage of the reading.",
+        )
+        col4.metric(
+            "Cycle stage",
+            stage,
+            help="Heuristic early / mid / late / recession signal for this indicator.",
+        )
+
+        render_section_header(
+            "Historical Series",
+            "Trend view for the selected indicator across the available observation window.",
+        )
+        chart_df = series.rename("Value").to_frame().reset_index()
+        chart_df.columns = ["Date", "Value"]
+        chart_df["Date"] = pd.to_datetime(chart_df["Date"])
+        chart_df["Value"] = pd.to_numeric(chart_df["Value"], errors="coerce")
+        chart_df = chart_df.dropna(subset=["Date", "Value"])
+        st.line_chart(chart_df, x="Date", y="Value", use_container_width=True)
+
+        render_section_header(
+            "Research Note",
+            "Plain-language interpretation for the selected indicator.",
+        )
+        render_panel("Interpretation", interpret_indicator(selected, series))
+    else:
+        st.info("Charts and metrics appear once a FRED API key is configured.")
+
+with allocation_tab:
+    render_section_header(
+        "Conditional Asset Allocation",
+        "Portfolio policy views organized around the current cycle regime.",
+    )
+    alloc_cols = st.columns(3)
+    with alloc_cols[0]:
+        render_panel(
+            "Strategic Anchor",
+            "Long-term policy weights and rebalancing bands for the core allocation.",
+        )
+    with alloc_cols[1]:
+        render_panel(
+            "Regime Tilt",
+            "Conditional overweights and underweights derived from cycle-stage signals.",
+        )
+    with alloc_cols[2]:
+        render_panel(
+            "Risk Controls",
+            "Drawdown, concentration, liquidity, and volatility checks for implementation.",
+        )
+
+with performance_tab:
+    render_section_header(
+        "Historical Performance",
+        "Performance attribution and risk analytics for strategy review.",
+    )
+    perf_cols = st.columns(3)
+    with perf_cols[0]:
+        render_panel("Return History", "Trailing and calendar-period performance views.")
+    with perf_cols[1]:
+        render_panel("Risk Profile", "Volatility, drawdown, and downside-capture analytics.")
+    with perf_cols[2]:
+        render_panel("Attribution", "Cycle-stage and asset-class contribution analysis.")
