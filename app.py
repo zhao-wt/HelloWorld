@@ -114,12 +114,12 @@ INDICATORS: list[dict[str, Any]] = [
         "name": "Unemployment Trend (Current - 3YMA)",
         "category": "Labor market",
         "description": (
-            "UNRATE minus its 3-month moving average. Positive values mean "
-            "unemployment is rising faster than its very recent trend."
+            "UNRATE minus its 3-year moving average. Positive values mean "
+            "unemployment is above its longer trend."
         ),
         "source_url": "https://fred.stlouisfed.org/series/UNRATE",
-        "fred_id": "UNRATE_VS_3MMA",
-        "computed": "unemployment_vs_3mma",
+        "fred_id": "UNRATE_VS_3YMA",
+        "computed": "unemployment_vs_3yma",
         "format": "percent",
     },
     {
@@ -360,10 +360,29 @@ def compute_sp500_vs_200dma(api_key: str, limit: int = 500) -> pd.Series:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def compute_unemployment_vs_3mma(api_key: str, limit: int = 500) -> pd.Series:
+def compute_unemployment_vs_3yma(api_key: str, limit: int = 500) -> pd.Series:
+    components = compute_unemployment_trend_components(api_key, limit=limit)
+    return components["Difference"]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def compute_unemployment_trend_components(
+    api_key: str, limit: int = 500
+) -> pd.DataFrame:
     unrate = fetch_observations_series("UNRATE", api_key, limit=limit)
-    ma3 = unrate.rolling(3, min_periods=3).mean()
-    return unrate - ma3
+    ma36 = unrate.rolling(36, min_periods=36).mean()
+    components = pd.concat(
+        [
+            unrate.rename("Unemployment rate"),
+            ma36.rename("3-year moving average"),
+        ],
+        axis=1,
+    )
+    components["Difference"] = (
+        components["Unemployment rate"] - components["3-year moving average"]
+    )
+    components.index.name = "Date"
+    return components.dropna()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -384,8 +403,8 @@ def compute_indicator_series(indicator: dict[str, Any], api_key: str) -> pd.Seri
     computed = indicator.get("computed")
     if computed == "sp500_vs_200dma":
         return compute_sp500_vs_200dma(api_key).dropna()
-    if computed == "unemployment_vs_3mma":
-        return compute_unemployment_vs_3mma(api_key).dropna()
+    if computed == "unemployment_vs_3yma":
+        return compute_unemployment_vs_3yma(api_key).dropna()
     if computed == "shiller_cape":
         return fetch_shiller_cape_series().dropna()
     if computed == "sp500_it_weight":
@@ -397,8 +416,8 @@ def fetch_indicator_history_for_stage(indicator: dict[str, Any], api_key: str) -
     computed = indicator.get("computed")
     if computed == "sp500_vs_200dma":
         return compute_sp500_vs_200dma(api_key).dropna()
-    if computed == "unemployment_vs_3mma":
-        return compute_unemployment_vs_3mma(api_key).dropna()
+    if computed == "unemployment_vs_3yma":
+        return compute_unemployment_vs_3yma(api_key).dropna()
     if computed == "shiller_cape":
         return fetch_shiller_cape_series().dropna()
     if computed == "sp500_it_weight":
@@ -412,8 +431,8 @@ def fetch_indicator_history_for_stats(indicator: dict[str, Any], api_key: str) -
     # For computed series, use a larger recent window to get stable percentiles.
     if computed == "sp500_vs_200dma":
         return compute_sp500_vs_200dma(api_key, limit=2000).dropna()
-    if computed == "unemployment_vs_3mma":
-        return compute_unemployment_vs_3mma(api_key, limit=600).dropna()
+    if computed == "unemployment_vs_3yma":
+        return compute_unemployment_vs_3yma(api_key, limit=600).dropna()
     if computed == "shiller_cape":
         return fetch_shiller_cape_series().dropna()
     if computed == "sp500_it_weight":
@@ -545,7 +564,7 @@ def classify_cycle_stage(stage_key: str, series: pd.Series) -> str:
             return "Recession"
         return "Mid"
 
-    if stage_key == "unemployment_vs_3mma":
+    if stage_key == "unemployment_vs_3yma":
         if latest > 0.3 or (mom > 0.1 and pct >= 70):
             return "Recession"
         if latest > 0.1 or mom > 0.05:
@@ -808,11 +827,11 @@ def interpret_indicator(indicator: dict[str, Any], series: pd.Series) -> str:
             parts.append("Price is **above** the 200-day average—typical of expansion phases.")
     elif stage_key == "USALOLITOAASTSAM":
         parts.append("A declining leading index often precedes slower growth over the next few quarters.")
-    elif stage_key == "unemployment_vs_3mma":
+    elif stage_key == "unemployment_vs_3yma":
         if latest > 0:
-            parts.append("Unemployment is **rising faster** than its 3-month trend.")
+            parts.append("Unemployment is **above** its 3-year moving average.")
         else:
-            parts.append("Unemployment is **not deteriorating** vs its 3-month trend.")
+            parts.append("Unemployment is **at or below** its 3-year moving average.")
     elif stage_key == "A191RL1Q225SBEA":
         if latest < 2:
             parts.append("Growth is **subdued** on a quarterly annualized basis.")
@@ -1158,12 +1177,37 @@ with cycle_tab:
             "Historical Series",
             "Trend view for the selected indicator across the available observation window.",
         )
-        chart_df = series.rename("Value").to_frame().reset_index()
-        chart_df.columns = ["Date", "Value"]
-        chart_df["Date"] = pd.to_datetime(chart_df["Date"])
-        chart_df["Value"] = pd.to_numeric(chart_df["Value"], errors="coerce")
-        chart_df = chart_df.dropna(subset=["Date", "Value"])
-        st.line_chart(chart_df, x="Date", y="Value", use_container_width=True)
+        if indicator_stage_key(selected) == "unemployment_vs_3yma":
+            trend_components = compute_unemployment_trend_components(
+                api_key, limit=600
+            )
+            line_df = trend_components[
+                ["Unemployment rate", "3-year moving average"]
+            ].reset_index()
+            line_df["Date"] = pd.to_datetime(line_df["Date"])
+            st.line_chart(
+                line_df,
+                x="Date",
+                y=["Unemployment rate", "3-year moving average"],
+                use_container_width=True,
+            )
+
+            spread_df = trend_components[["Difference"]].reset_index()
+            spread_df["Date"] = pd.to_datetime(spread_df["Date"])
+            st.markdown("#### Difference: unemployment rate minus 3-year moving average")
+            st.bar_chart(
+                spread_df,
+                x="Date",
+                y="Difference",
+                use_container_width=True,
+            )
+        else:
+            chart_df = series.rename("Value").to_frame().reset_index()
+            chart_df.columns = ["Date", "Value"]
+            chart_df["Date"] = pd.to_datetime(chart_df["Date"])
+            chart_df["Value"] = pd.to_numeric(chart_df["Value"], errors="coerce")
+            chart_df = chart_df.dropna(subset=["Date", "Value"])
+            st.line_chart(chart_df, x="Date", y="Value", use_container_width=True)
 
         render_section_header(
             "Research Note",
