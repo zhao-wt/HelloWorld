@@ -56,6 +56,7 @@ from sklearn.metrics import (
 )
 
 _BEAR_DIR = Path(__file__).resolve().parent
+_DATA_DIR = _BEAR_DIR.parent / "data"
 
 
 # ---------------------------------------------------------------------------
@@ -365,8 +366,8 @@ if __name__ == "__main__":
     print(f"{'='*65}")
 
     # -- Load data --
-    cf = pd.read_csv(_BEAR_DIR / "correction_features.csv", index_col=0, parse_dates=True)
-    tg = pd.read_csv(_BEAR_DIR / "targets.csv",             index_col=0, parse_dates=True)
+    cf = pd.read_csv(_DATA_DIR / "correction_features.csv", index_col=0, parse_dates=True)
+    tg = pd.read_csv(_DATA_DIR / "targets.csv",             index_col=0, parse_dates=True)
     y  = tg["y_corr"]
     print(f"\n  Correction features : {list(cf.columns)}")
     print(f"  Rows                : {len(cf)}")
@@ -587,9 +588,9 @@ if __name__ == "__main__":
         "prob_corr_oos": best["prob_oos"],
         "y_corr":        y,
     })
-    out_path = _BEAR_DIR / "correction_model_output.csv"
+    out_path = _DATA_DIR / "correction_model_output.csv"
     out.to_csv(out_path, date_format="%Y-%m-%d", float_format="%.6f")
-    model_path = _BEAR_DIR / "correction_model.pkl"
+    model_path = _DATA_DIR / "correction_model.pkl"
     with open(model_path, "wb") as fh:
         pickle.dump({"coef": coef, "intercept": best["intercept"],
                      "features": feats, "mu": mu_b, "sig": sig_b}, fh)

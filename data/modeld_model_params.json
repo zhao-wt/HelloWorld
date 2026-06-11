@@ -1,0 +1,60 @@
+{
+  "kind": "modeld",
+  "title": "Bear \u2014 Model D (1980s)",
+  "subtitle": ">20% drawdown over next 12 months (modern member)",
+  "horizon": 12,
+  "features": [
+    "ffr_6m_chg",
+    "infl_zscore_120m",
+    "baa_aaa_z60"
+  ],
+  "signs": {
+    "ffr_6m_chg": -1,
+    "infl_zscore_120m": 1,
+    "baa_aaa_z60": 1
+  },
+  "labels": {
+    "ffr_6m_chg": [
+      "Fed funds rate, 6m change",
+      "Policy"
+    ],
+    "infl_zscore_120m": [
+      "CPI inflation, 10yr z-score",
+      "Inflation"
+    ],
+    "baa_aaa_z60": [
+      "BAA-AAA quality spread, 5yr z-score",
+      "Credit"
+    ]
+  },
+  "coef": [
+    -0.8014078356813701,
+    0.9215114062841488,
+    0.6757868768134274
+  ],
+  "intercept": -2.046576136781731,
+  "mu": {
+    "ffr_6m_chg": -0.05177319587628867,
+    "infl_zscore_120m": -0.1628531257731958,
+    "baa_aaa_z60": -0.18889767010309275
+  },
+  "sigma": {
+    "ffr_6m_chg": 0.8522351204448946,
+    "infl_zscore_120m": 1.2131975827088877,
+    "baa_aaa_z60": 1.2339024310832252
+  },
+  "base_rate": 0.1670103092783505,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1986-01-31",
+  "hac_pvalues": {
+    "ffr_6m_chg": 0.012939627897735395,
+    "infl_zscore_120m": 0.0015991962749457578,
+    "baa_aaa_z60": 0.017555642024515095
+  },
+  "hac_intercept_p": 5.977015539171404e-06,
+  "hac_maxlags": 12
+}

@@ -1,0 +1,78 @@
+{
+  "kind": "correction",
+  "title": "Correction",
+  "subtitle": ">10% drawdown over next 6 months",
+  "horizon": 6,
+  "features": [
+    "vts_slope",
+    "spx_vs_10ma",
+    "m12_1_mom",
+    "anfci_3m_chg",
+    "cape_20yr_pct",
+    "baa_zscore_24m"
+  ],
+  "signs": {
+    "vts_slope": 1,
+    "spx_vs_10ma": -1,
+    "m12_1_mom": 1,
+    "anfci_3m_chg": 1,
+    "cape_20yr_pct": -1,
+    "baa_zscore_24m": 1
+  },
+  "labels": {
+    "vts_slope": [
+      "VIX term structure slope (VIX3M-VIX)",
+      "Volatility"
+    ],
+    "spx_vs_10ma": [
+      "S&P 500 vs 10-month MA",
+      "Trend"
+    ],
+    "m12_1_mom": [
+      "12-1 month price momentum",
+      "Trend"
+    ],
+    "anfci_3m_chg": [
+      "Adj. financial conditions, 3m change",
+      "Fin. cond."
+    ],
+    "cape_20yr_pct": [
+      "Shiller CAPE, 20yr percentile",
+      "Valuation"
+    ],
+    "baa_zscore_24m": [
+      "BAA spread, 2yr z-score",
+      "Credit"
+    ]
+  },
+  "coef": [
+    0.21930849268124583,
+    -0.33000436370325065,
+    0.5602391006404195,
+    0.5853336819153806,
+    -1e-08,
+    0.2562266241116934
+  ],
+  "intercept": -0.6709046940856999,
+  "mu": {
+    "vts_slope": 1.6957272727272727,
+    "spx_vs_10ma": 3.2500453772727274,
+    "m12_1_mom": 0.09808658636363637,
+    "anfci_3m_chg": -0.014104545454545453,
+    "cape_20yr_pct": 0.6100989045454545,
+    "baa_zscore_24m": -0.030248736363636425
+  },
+  "sigma": {
+    "vts_slope": 1.8342631726302019,
+    "spx_vs_10ma": 7.847200103910161,
+    "m12_1_mom": 0.1634632432423916,
+    "anfci_3m_chg": 0.39227860635277517,
+    "cape_20yr_pct": 0.2927135947470023,
+    "baa_zscore_24m": 1.273259694807745
+  },
+  "base_rate": 0.35454545454545455,
+  "min_w": 0.0,
+  "max_w": 0.3,
+  "model_type": "logistic",
+  "value_kind": "probability"
+}

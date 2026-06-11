@@ -198,9 +198,10 @@ ALL_INDICATORS: list[dict[str, Any]] = [
     {
         "name": "3M Treasury yield",
         "category": "Yield curve",
-        "description": "3-month Treasury yield.",
-        "source_url": "https://fred.stlouisfed.org/series/DGS3MO",
-        "fred_id": "DGS3MO",
+        "description": ("3-month Treasury bill rate (secondary market, discount "
+                        "basis). Uses TB3MS for long history back to 1934."),
+        "source_url": "https://fred.stlouisfed.org/series/TB3MS",
+        "fred_id": "TB3MS",
         "format": "percent",
     },
     {
@@ -609,6 +610,7 @@ SHILLER_CAPE_URL = (
 SHILLER_CAPE_LOCAL_PATH = Path(__file__).resolve().parent / "data" / "shiller_ie_data.xls"
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "piney-woods-logo.png"
 BEAR_DIR = Path(__file__).resolve().parent / "bear"
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 CYCLE_STAGES = ("Early", "Mid", "Late", "Recession")
 STAGE_COLORS = {
@@ -845,7 +847,7 @@ def compute_sp500_it_weight(api_key: str, limit: int = 500) -> pd.Series:
 
 @st.cache_data(show_spinner=False)
 def load_engineered_feature_series(features_file: str, column: str) -> pd.Series:
-    df = pd.read_csv(BEAR_DIR / features_file, parse_dates=["date"])
+    df = pd.read_csv(DATA_DIR / features_file, parse_dates=["date"])
     if column not in df.columns:
         raise ValueError(f"{column} not found in {features_file}")
     series = pd.to_numeric(df[column], errors="coerce")
@@ -856,7 +858,7 @@ def load_engineered_feature_series(features_file: str, column: str) -> pd.Series
 
 @st.cache_data(show_spinner=False)
 def load_raw_monthly_series(column: str) -> pd.Series:
-    df = pd.read_csv(BEAR_DIR / "raw_monthly.csv", parse_dates=["date"])
+    df = pd.read_csv(DATA_DIR / "raw_monthly.csv", parse_dates=["date"])
     if column not in df.columns:
         raise ValueError(f"{column} not found in raw_monthly.csv")
     series = pd.to_numeric(df[column], errors="coerce")
@@ -1903,8 +1905,8 @@ def render_panel(title: str, copy: str) -> None:
 
 @st.cache_data(show_spinner=False)
 def load_model_artifacts(features_file: str, output_file: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    features = pd.read_csv(BEAR_DIR / features_file, parse_dates=["date"])
-    outputs = pd.read_csv(BEAR_DIR / output_file, parse_dates=["date"])
+    features = pd.read_csv(DATA_DIR / features_file, parse_dates=["date"])
+    outputs = pd.read_csv(DATA_DIR / output_file, parse_dates=["date"])
     features = features.set_index("date").sort_index()
     outputs = outputs.set_index("date").sort_index()
     return features, outputs
@@ -1912,7 +1914,7 @@ def load_model_artifacts(features_file: str, output_file: str) -> tuple[pd.DataF
 
 @st.cache_data(show_spinner=False)
 def load_raw_spx() -> pd.Series:
-    raw = pd.read_csv(BEAR_DIR / "raw_monthly.csv", parse_dates=["date"])
+    raw = pd.read_csv(DATA_DIR / "raw_monthly.csv", parse_dates=["date"])
     raw = raw.set_index("date").sort_index()
     spx_col = "SPX" if "SPX" in raw.columns else "SP500"
     return pd.to_numeric(raw[spx_col], errors="coerce").dropna()
@@ -2186,9 +2188,24 @@ def _load_assessment_cached(kind: str) -> dict:
     return load_assessment(kind)
 
 
-def _risk_level(prob: float, base_rate: float) -> tuple[str, str]:
-    """Map probability vs base rate to a (label, hex-color) risk level."""
-    ratio = prob / base_rate if base_rate > 0 else 0.0
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_ensemble_cached() -> tuple[dict, pd.DataFrame]:
+    """Load the precomputed ensemble summary + OOS series (no ML libs needed)."""
+    import json
+    with open(DATA_DIR / "ensemble_params.json") as fh:
+        params = json.load(fh)
+    oos = pd.read_csv(DATA_DIR / "ensemble_oos.csv", index_col=0, parse_dates=True)
+    return params, oos
+
+
+def _risk_level(value: float, base: float) -> tuple[str, str]:
+    """
+    Map a reading vs its historical base to a (label, hex-color) risk level.
+
+    Works for probabilities (base > 0) and for drawdowns (both negative):
+    in either case ratio > 1 means the current reading is worse than average.
+    """
+    ratio = value / base if base != 0 else 0.0
     if ratio < 1.0:
         return "Low", "#22c55e"
     if ratio < 1.8:
@@ -2198,8 +2215,12 @@ def _risk_level(prob: float, base_rate: float) -> tuple[str, str]:
 
 def render_factor_table(factors: pd.DataFrame) -> None:
     """HTML factor-reading table with colored Direction cells."""
+    has_hac = "P (HAC)" in factors.columns
     headers = ["Factor", "Category", "Raw value", "Z-score",
-               "Weight", "Contribution", "Direction"]
+               "Weight", "Contribution"]
+    if has_hac:
+        headers.append("p (HAC)")
+    headers.append("Direction")
     header_html = "".join(f"<th>{h}</th>" for h in headers)
 
     rows_html: list[str] = []
@@ -2212,9 +2233,22 @@ def render_factor_table(factors: pd.DataFrame) -> None:
             f'<td style="text-align:right;">{r["Z-score"]:+.2f}</td>',
             f'<td style="text-align:right;">{r["Weight %"]:.1f}%</td>',
             f'<td style="text-align:right;">{r["Contribution"]:+.3f}</td>',
-            f'<td style="background:{dir_color};color:white;font-weight:600;'
-            f'text-align:center;">{escape(str(r["Direction"]))}</td>',
         ]
+        if has_hac:
+            pv = r["P (HAC)"]
+            if pd.isna(pv):
+                pcell = "—"
+            else:
+                star = " *" if pv < 0.05 else (" ." if pv < 0.10 else "")
+                pcell = f"{pv:.3f}{star}"
+            weight = "600" if (not pd.isna(pv) and pv < 0.05) else "400"
+            cells.append(
+                f'<td style="text-align:right;font-weight:{weight};">{pcell}</td>'
+            )
+        cells.append(
+            f'<td style="background:{dir_color};color:white;font-weight:600;'
+            f'text-align:center;">{escape(str(r["Direction"]))}</td>'
+        )
         rows_html.append("<tr>" + "".join(cells) + "</tr>")
 
     table_html = f"""
@@ -2234,16 +2268,39 @@ def render_probability_history_chart(
     base_rate: float,
     color: str,
     years: int = 10,
+    value_kind: str = "probability",
+    band_mode: str = "episode",
 ) -> None:
-    """Altair line chart of fitted probability over the last `years` years."""
+    """
+    Altair area chart of the fitted value over the last `years` years.
+
+    value_kind:
+      "probability" — y in [0, 1], reference line = base rate
+      "drawdown"    — y negative (expected drawdown), reference = historical mean
+    """
     cutoff = pd.Timestamp.today() - pd.DateOffset(years=years)
     hist = history[history.index >= cutoff]
     if hist.empty:
-        st.info("No probability history available for the selected window.")
+        st.info("No history available for the selected window.")
         return
 
     df = hist.rename("Probability").reset_index()
     df.columns = ["date", "Probability"]
+
+    if value_kind == "drawdown":
+        value_title = "Expected drawdown"
+        ymin = min(float(df["Probability"].min()) * 1.1, base_rate * 1.5)
+        y_scale = alt.Scale(domain=[ymin, 0.05])
+        ref_label = f"Historical mean {base_rate:.0%}"
+    elif value_kind == "severity":
+        value_title = "Expected drawdown"
+        ymax = max(float(df["Probability"].max()) * 1.15, base_rate * 2)
+        y_scale = alt.Scale(domain=[0, min(ymax, 1.0)])
+        ref_label = f"Historical mean {base_rate:.0%}"
+    else:
+        value_title = "Probability"
+        y_scale = alt.Scale(domain=[0, 1])
+        ref_label = f"Base rate {base_rate:.0%}"
 
     line = (
         alt.Chart(df)
@@ -2262,12 +2319,12 @@ def render_probability_history_chart(
         .encode(
             x=alt.X("date:T", title="Date",
                     axis=alt.Axis(format="%Y", labelAngle=0)),
-            y=alt.Y("Probability:Q", title="Probability",
+            y=alt.Y("Probability:Q", title=value_title,
                     axis=alt.Axis(format="%"),
-                    scale=alt.Scale(domain=[0, 1])),
+                    scale=y_scale),
             tooltip=[
                 alt.Tooltip("date:T", title="Date", format="%Y-%m"),
-                alt.Tooltip("Probability:Q", title="Probability", format=".1%"),
+                alt.Tooltip("Probability:Q", title=value_title, format=".1%"),
             ],
         )
     )
@@ -2277,17 +2334,156 @@ def render_probability_history_chart(
         .encode(y="y:Q")
     )
     rule_label = (
-        alt.Chart(pd.DataFrame({"y": [base_rate], "label": [f"Base rate {base_rate:.0%}"]}))
+        alt.Chart(pd.DataFrame({"y": [base_rate], "label": [ref_label]}))
         .mark_text(align="left", dx=5, dy=-6, color="#6b7280", fontSize=11)
         .encode(y="y:Q", text="label:N")
     )
-    band_layers = build_drawdown_band_layers(
-        load_drawdown_episodes(get_fred_api_key()),
-        df["date"].min(),
-        df["date"].max(),
-    )
+    if band_mode == "rolling12":
+        band_layers = build_rolling12_band_layers(df["date"].min(), df["date"].max())
+    elif band_mode == "rolling6":
+        band_layers = build_rolling6_band_layers(df["date"].min(), df["date"].max())
+    else:
+        band_layers = build_drawdown_band_layers(
+            load_drawdown_episodes(get_fred_api_key()),
+            df["date"].min(),
+            df["date"].max(),
+        )
     chart = alt.layer(*band_layers, line, rule, rule_label).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
+
+
+def render_member_breakdown_table(params: dict) -> None:
+    """Compact table of the four era-trained members and their OOS skill."""
+    meta = params["members_meta"]
+    rows_html = []
+    for k in params["members"]:
+        m = meta[k]
+        # Era label from the title, e.g. "Bear — Model A (1920s)" -> "A · 1920s"
+        letter = k[-1].upper()
+        era = m["title"].split("(")[-1].rstrip(")") if "(" in m["title"] else ""
+        cats = ", ".join(m["categories"])
+        cur = m["current_prob"]; aucc = m["oos_auc_common"]; aucn = m["oos_auc_native"]
+        cur_color = "#ef4444" if cur >= m["base_rate"] else "#22c55e"
+        rows_html.append(
+            "<tr>"
+            f'<td style="font-weight:600;">Model {letter} <span style="color:#5d675f;">· {escape(era)}</span></td>'
+            f'<td>train {escape(str(m["train_start"])[:4])}+</td>'
+            f'<td style="text-align:center;">{m["n_factors"]}</td>'
+            f'<td style="font-size:0.86rem;">{escape(cats)}</td>'
+            f'<td style="text-align:right;color:{cur_color};font-weight:600;">{cur:.1%}</td>'
+            f'<td style="text-align:right;">{aucn:.3f}</td>'
+            f'<td style="text-align:right;">{aucc:.3f}</td>'
+            "</tr>"
+        )
+    table_html = f"""
+    <table style="width:100%;border-collapse:collapse;font-size:0.92rem;">
+      <thead><tr style="background:#f3f4f6;text-align:left;">
+        <th>Member</th><th>Trained</th><th>#</th><th>Factor categories</th>
+        <th style="text-align:right;">Current P</th>
+        <th style="text-align:right;">OOS AUC<br>(native)</th>
+        <th style="text-align:right;">OOS AUC<br>(2005+)</th>
+      </tr></thead>
+      <tbody>{"".join(rows_html)}</tbody>
+    </table>
+    <style>table td, table th {{ border:1px solid #e5e7eb; padding:0.45rem 0.7rem; }}</style>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+def render_ensemble_bear_page(title: str, caption: str) -> None:
+    """Primary Bear page: calibrated ENSEMBLE probability + per-member breakdown."""
+    render_section_header(title, caption)
+
+    try:
+        params, oos = _load_ensemble_cached()
+        members = {k: _load_assessment_cached(k) for k in params["members"]}
+    except Exception as exc:
+        st.error(
+            f"Could not load the ensemble assessment: {exc}\n\n"
+            "Run `python -m bear.ensemble` to generate the ensemble artifacts."
+        )
+        return
+
+    prob_raw = params["current_ensemble_prob"]
+    prob     = params["current_ensemble_prob_calibrated"]
+    base     = params["metrics"]["realized_base_rate"]
+    as_of    = pd.Timestamp(params["as_of"])
+    level, color = _risk_level(prob, base)
+
+    # -- Top metric row (calibrated probability is the headline) --
+    m = st.columns(4)
+    m[0].metric("Bear probability (ensemble)", f"{prob:.1%}",
+                help="Equal-weight average of the four era-trained members, "
+                     "Platt-recalibrated to the realized base rate.")
+    m[1].metric("As of", as_of.strftime("%Y-%m-%d"))
+    m[2].metric("Historical base rate", f"{base:.1%}",
+                help="Realized frequency of a >20% 12-month drawdown over the OOS span.")
+    m[3].markdown(
+        f"""
+        <div style="border:1px solid #dce3dd;border-radius:8px;
+                    padding:0.85rem 0.9rem;background:#ffffff;">
+          <div style="color:#5d675f;font-size:0.84rem;">Risk level</div>
+          <div style="background:{color};color:white;font-weight:700;
+                      text-align:center;border-radius:6px;padding:0.3rem;
+                      margin-top:0.35rem;font-size:1.05rem;">{level}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"Raw equal-weight average **{prob_raw:.1%}** → Platt-calibrated **{prob:.1%}** "
+        f"(averaging is under-confident; calibration map fit on realized OOS history). "
+        f"Ensemble OOS AUC **{params['metrics']['ensemble_auc_common']:.3f}** on the common "
+        f"2005+ window, **{params['metrics']['ensemble_auc_full']:.3f}** across the full "
+        f"1950→ span."
+    )
+
+    # -- Member breakdown --
+    render_section_header(
+        "Ensemble Members",
+        "Four logistic models, each trained on the longest history its feature set "
+        "permits, every coefficient Newey-West HAC-significant. Each member votes "
+        "once it is out-of-sample; the ensemble is their equal-weight average.",
+    )
+    render_member_breakdown_table(params)
+
+    # -- Ensemble probability history (walk-forward OOS, full coverage) --
+    render_section_header(
+        "Bear Probability History — Out-of-Sample, Walk-Forward (Last 50 Years)",
+        "Equal-weight ensemble of the members' honest expanding-window predictions "
+        "(each member re-fit on prior data only). Growing membership: Model A from "
+        "1950, B from 1970, C from 1985, D from 2005. Shaded bands mark the 12-month "
+        "rolling drawdown (correction 10–20%, bear >20%).",
+    )
+    render_probability_history_chart(
+        oos["ensemble"].dropna(), base, color, years=50,
+        value_kind="probability", band_mode="rolling12")
+
+    # -- Per-member factor detail (expanders) --
+    render_section_header(
+        "Member Factor Readings",
+        "Current factor values, weights, and HAC p-values for each member model.",
+    )
+    for k in params["members"]:
+        a = members[k]
+        meta = params["members_meta"][k]
+        with st.expander(
+            f"{a['title']}  —  current P {meta['current_prob']:.1%}  ·  "
+            f"OOS AUC {meta['oos_auc_native']:.3f}"
+        ):
+            render_factor_table(a["factors"])
+            render_model_formula(a)
+
+    # -- Legacy single-model view (continuity) --
+    with st.expander("Legacy single-model view (bearplus)"):
+        st.caption(
+            "The previous single unconstrained-logistic Bear model, retained for "
+            "reference. The ensemble above supersedes it as the headline probability."
+        )
+        bp = _load_assessment_cached("bearplus")
+        b_level, b_color = _risk_level(bp["current_prob"], bp["base_rate"])
+        st.metric("Bear probability (bearplus)", f"{bp['current_prob']:.1%}")
+        render_factor_table(bp["factors"])
 
 
 def render_calibrated_model_page(kind: str, title: str, caption: str) -> None:
@@ -2304,18 +2500,26 @@ def render_calibrated_model_page(kind: str, title: str, caption: str) -> None:
         )
         return
 
-    prob   = a["current_prob"]
-    base   = a["base_rate"]
-    as_of  = a["as_of"]
+    prob       = a["current_prob"]
+    base       = a["base_rate"]
+    as_of      = a["as_of"]
+    value_kind = a.get("value_kind", "probability")
+    is_dd      = value_kind == "drawdown"
+    is_sev     = value_kind == "severity"
+    dd_like    = is_dd or is_sev          # drawdown-flavored labels
     level, color = _risk_level(prob, base)
+
+    metric_label = "Expected drawdown" if dd_like else f"{a['title']} probability"
+    base_label   = "Historical mean drawdown" if dd_like else "Historical base rate"
+    base_help    = ("Average realized 12-month forward drawdown severity in the sample."
+                    if dd_like else
+                    "Unconditional frequency of the event in the training sample.")
 
     # -- Top metric row --
     m = st.columns(4)
-    m[0].metric(f"{a['title']} probability", f"{prob:.1%}",
-                help=a["subtitle"])
+    m[0].metric(metric_label, f"{prob:.1%}", help=a["subtitle"])
     m[1].metric("As of", as_of.strftime("%Y-%m-%d"))
-    m[2].metric("Historical base rate", f"{base:.1%}",
-                help="Unconditional frequency of the event in the training sample.")
+    m[2].metric(base_label, f"{base:.1%}", help=base_help)
     m[3].markdown(
         f"""
         <div style="border:1px solid #dce3dd;border-radius:8px;
@@ -2329,27 +2533,234 @@ def render_calibrated_model_page(kind: str, title: str, caption: str) -> None:
         unsafe_allow_html=True,
     )
 
-    st.caption(
-        f"Probability of a **{a['subtitle']}**, estimated by a weight-constrained "
-        f"logistic model (each factor ≤ 30% weight; signs fixed to economic priors; "
-        f"probabilities calibrated to the true base rate)."
-    )
+    if is_sev:
+        st.caption(
+            f"**Expected drawdown severity** over the next {a['horizon']} months, "
+            f"from a weight-constrained *fractional logistic* regression on the "
+            f"rolling 12-month drawdown (each factor 10–40% weight; signs fixed to "
+            f"economic priors). Output $\\sigma(z)\\in[0,1]$ is the expected "
+            f"drawdown as a fraction of the prior peak."
+        )
+    elif is_dd:
+        st.caption(
+            f"**Expected max drawdown** over the next {a['horizon']} months, from a "
+            f"weight-constrained linear regression on the rolling 12-month drawdown "
+            f"(each factor 10–40% weight; signs fixed to economic priors)."
+        )
+    elif a.get("unconstrained"):
+        st.caption(
+            f"Probability of a **{a['subtitle']}**, from an *unconstrained* logistic "
+            f"regression (free signs and weights, maximum likelihood) on the long "
+            f"1960+ sample. Factors were chosen by exhaustive search to maximize "
+            f"in-sample AUC; inference uses Newey-West HAC."
+        )
+    else:
+        st.caption(
+            f"Probability of a **{a['subtitle']}**, estimated by a weight-constrained "
+            f"logistic model (signs fixed to economic priors; probabilities calibrated "
+            f"to the true base rate)."
+        )
 
     # -- Factor readings --
+    if dd_like:
+        contrib_desc = ("contribution to the expected drawdown (log-odds of "
+                        "severity). Bearish = larger drawdown.")
+    else:
+        contrib_desc = ("contribution to the current log-odds. "
+                        "Bearish = pushes probability up.")
     render_section_header(
         "Current Factor Readings",
         "Each factor's latest value, standardized score, model weight, and its "
-        "contribution to the current log-odds. Bearish = pushes probability up.",
+        + contrib_desc,
     )
     render_factor_table(a["factors"])
-
-    # -- Historical curve --
-    render_section_header(
-        "Probability History — Last 10 Years",
-        "Fitted probability of the final model applied across history. "
-        "Dashed line marks the unconditional base rate.",
+    st.caption(
+        f"**p (HAC)** is the Newey-West heteroskedasticity- and "
+        f"autocorrelation-consistent p-value (max lag = {a.get('hac_maxlags', a['horizon'])} "
+        f"months), correcting for the serial correlation from overlapping rolling "
+        f"windows.  `*` p<0.05  `.` p<0.10."
     )
-    render_probability_history_chart(a["history"], base, color, years=10)
+
+    # -- Historical curves: in-sample (top row) and out-of-sample (bottom row) --
+    # Bear+ shades the 12-month rolling drawdown classification (its dependent
+    # variable); the other tabs shade realized peak-to-recovery episodes.
+    if a["kind"] == "bearplus":
+        band_mode = "rolling12"
+    elif a["kind"] in ("correctionplus", "correction"):
+        band_mode = "rolling6"
+    else:
+        band_mode = "episode"
+
+    if band_mode == "rolling12":
+        band_note = (" Shaded bands mark the 12-month rolling drawdown (index vs its "
+                     "trailing 12-month high): correction (10–20%) or bear (>20%).")
+    elif band_mode == "rolling6":
+        band_note = (" Shaded bands mark the 6-month rolling correction (index >10% "
+                     "below its trailing 6-month high).")
+    else:
+        band_note = ""
+    noun = "Drawdown" if dd_like else "Probability"
+    render_section_header(
+        f"{noun} History — In-Sample Fit (Last 50 Years)",
+        "Final-model fitted values applied across all history "
+        "(parameters estimated on the full sample). "
+        "Dashed line marks the historical mean." + band_note,
+    )
+    render_probability_history_chart(a["history"], base, color, years=50,
+                                     value_kind=value_kind, band_mode=band_mode)
+
+    history_oos = a.get("history_oos")
+    if history_oos is not None and not history_oos.empty:
+        render_section_header(
+            f"{noun} History — Out-of-Sample, Walk-Forward (Last 50 Years)",
+            "Honest expanding-window estimate: at each month the model is "
+            "re-fit on prior data only, then predicts that month. No look-ahead.",
+        )
+        render_probability_history_chart(history_oos, base, color, years=50,
+                                         value_kind=value_kind, band_mode=band_mode)
+    else:
+        st.info("Out-of-sample series unavailable — run `python -m bear.inference` "
+                "to generate the walk-forward history.")
+
+    # -- Mathematical formulation --
+    render_model_formula(a)
+
+
+def render_model_formula(a: dict) -> None:
+    """Render the fitted model in LaTeX at the bottom of the page."""
+    feats     = a["features"]
+    coef      = a["coef"]
+    intercept = a["intercept"]
+    mu        = a["mu"]
+    sigma     = a["sigma"]
+    labels    = a["labels"]
+    min_w     = a.get("min_w", 0.0)
+    max_w     = a.get("max_w", 1.0)
+    value_kind = a.get("value_kind", "probability")
+    is_dd     = value_kind == "drawdown"
+    is_sev    = value_kind == "severity"
+    n         = len(feats)
+
+    if is_sev:
+        subtitle_math = ("Weight-constrained fractional logistic regression on "
+                         "standardized factors (quasi-binomial), signs fixed to "
+                         "economic priors.")
+    elif is_dd:
+        subtitle_math = ("Weight-constrained linear regression on standardized "
+                         "factors, fitted by least squares with signs fixed to "
+                         "economic priors.")
+    else:
+        subtitle_math = ("Weight-constrained logistic regression on standardized "
+                         "factors, fitted by maximum likelihood with signs fixed "
+                         "to economic priors.")
+    render_section_header("Model — Mathematical Formulation", subtitle_math)
+
+    if is_sev:
+        # Fractional logistic: severity s_t = -MDD_t in [0,1], E[s_t]=sigma(z_t)
+        st.latex(
+            r"s_t \;=\; -\,\mathrm{MDD}_{t} \;=\; "
+            r"-\min_{t < u \le t+" + str(a["horizon"]) + r"}"
+            r"\left(\frac{P_u}{\max_{t<v\le u}P_v} - 1\right) \;\in\; [0,1]"
+        )
+        st.latex(
+            r"\hat{s}_t \;=\; \mathbb{E}[s_t] \;=\; \sigma(z_t) "
+            r"\;=\; \frac{1}{1 + e^{-z_t}}"
+        )
+        st.latex(
+            r"z_t \;=\; \beta_0 + \sum_{i=1}^{" + str(n) + r"} \beta_i\,\tilde{x}_{i,t},"
+            r"\qquad \tilde{x}_{i,t} \;=\; \frac{x_{i,t} - \mu_i}{\sigma_i}"
+        )
+        parts = [f"{intercept:+.3f}"]
+        for i, c in enumerate(coef, start=1):
+            parts.append(f"{c:+.3f}\\,\\tilde{{x}}_{{{i}}}")
+        st.latex(r"z_t \;=\; " + " ".join(parts))
+    elif is_dd:
+        # Linear (identity link): predicted forward max drawdown
+        st.latex(
+            r"\widehat{\mathrm{MDD}}_{t} \;=\; "
+            r"\mathbb{E}\!\left[\min_{t < s \le t+" + str(a["horizon"]) + r"}"
+            r"\left(\frac{P_s}{\max_{t<u\le s}P_u} - 1\right)\right]"
+            r" \;=\; \hat{y}_t"
+        )
+        st.latex(
+            r"\hat{y}_t \;=\; \beta_0 + \sum_{i=1}^{" + str(n) + r"} \beta_i\,\tilde{x}_{i,t},"
+            r"\qquad \tilde{x}_{i,t} \;=\; \frac{x_{i,t} - \mu_i}{\sigma_i}"
+        )
+        parts = [f"{intercept:+.4f}"]
+        for i, c in enumerate(coef, start=1):
+            parts.append(f"{c:+.4f}\\,\\tilde{{x}}_{{{i}}}")
+        st.latex(r"\hat{y}_t \;=\; " + " ".join(parts))
+    else:
+        # Logistic link
+        thresh = "20\\%" if a["horizon"] == 12 else "10\\%"
+        st.latex(
+            r"\hat{p}_t \;=\; \Pr\!\left(\text{drawdown} > " + thresh
+            + r"\ \text{within " + str(a["horizon"]) + r"m}\right)"
+            r" \;=\; \sigma(z_t) \;=\; \frac{1}{1 + e^{-z_t}}"
+        )
+        st.latex(
+            r"z_t \;=\; \beta_0 + \sum_{i=1}^{" + str(n) + r"} \beta_i\,\tilde{x}_{i,t},"
+            r"\qquad \tilde{x}_{i,t} \;=\; \frac{x_{i,t} - \mu_i}{\sigma_i}"
+        )
+        parts = [f"{intercept:+.3f}"]
+        for i, c in enumerate(coef, start=1):
+            parts.append(f"{c:+.3f}\\,\\tilde{{x}}_{{{i}}}")
+        st.latex(r"z_t \;=\; " + " ".join(parts))
+
+    # 4) Weight definition (and constraints, unless unconstrained)
+    if a.get("unconstrained"):
+        st.latex(
+            r"w_i \;=\; \frac{|\beta_i|}{\sum_{j=1}^{" + str(n) + r"} |\beta_j|}"
+            r"\quad\text{(relative importance; signs and weights unconstrained)}"
+        )
+    else:
+        st.latex(
+            r"w_i \;=\; \frac{|\beta_i|}{\sum_{j=1}^{" + str(n) + r"} |\beta_j|}"
+            r"\,, \qquad " + f"{min_w*100:.0f}\\% \\le w_i \\le {max_w*100:.0f}\\%"
+        )
+
+    # 5) Variable legend (symbols in LaTeX)
+    header = "| Symbol | Factor | $\\mu_i$ | $\\sigma_i$ | $\\beta_i$ | $w_i$ |\n"
+    sep    = "|---|---|---:|---:|---:|---:|\n"
+    rows = []
+    for i, f in enumerate(feats, start=1):
+        desc = labels[f][0]
+        w_i = abs(coef[i - 1]) / sum(abs(c) for c in coef) * 100
+        rows.append(
+            f"| $x_{{{i}}}$ | {desc} | {mu[f]:.3f} | {sigma[f]:.3f} | "
+            f"{coef[i-1]:+.3f} | {w_i:.1f}% |"
+        )
+    st.markdown(header + sep + "\n".join(rows))
+
+    # 6) Rolling-window definition of the dependent variable
+    h = a["horizon"]
+    st.latex(
+        r"\mathrm{MDD}_{t} \;=\; \min_{t < u \le t+" + str(h) + r"}"
+        r"\left(\frac{P_u}{\max_{t < v \le u} P_v} - 1\right)"
+        r"\quad\text{(rolling " + str(h) + r"-month forward window)}"
+    )
+    if is_sev:
+        rolling_note = (
+            f"The dependent variable is the **{h}-month rolling drawdown severity** "
+            f"$s_t=-\\mathrm{{MDD}}_t$ (worst peak-to-trough decline over the rolling "
+            f"{h}-month forward window)."
+        )
+    else:
+        thr_pct = "20" if h == 12 else "10"
+        evt_word = "bear market" if h == 12 else "correction"
+        rolling_note = (
+            f"The dependent variable is a binary **{h}-month rolling {evt_word}**: 1 "
+            f"when the rolling {h}-month forward drawdown exceeds {thr_pct}% "
+            f"($\\mathrm{{MDD}}_t \\le -{thr_pct}\\%$)."
+        )
+
+    st.caption(
+        rolling_note
+        + f"  Factors are standardized using their training-sample mean $\\mu_i$ and "
+        f"standard deviation $\\sigma_i$. Coefficient inference uses Newey-West "
+        f"**HAC** standard errors (max lag = {a.get('hac_maxlags', h)} months) to "
+        f"correct for the autocorrelation induced by overlapping rolling windows."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2368,7 +2779,7 @@ def load_spx_drawdown_series(api_key: Optional[str] = None) -> pd.Series:
     Monthly local SPX is used for the long pre-daily history. When a FRED API
     key is available, daily SP500 is used from its first available date forward.
     """
-    path = Path(__file__).resolve().parent / "bear" / "raw_monthly.csv"
+    path = Path(__file__).resolve().parent / "data" / "raw_monthly.csv"
     if not path.exists():
         return pd.Series(dtype=float)
 
@@ -2579,6 +2990,153 @@ def build_drawdown_band_layers(
     return layers
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_rolling12_bands() -> list[dict[str, Any]]:
+    """
+    Month-level 12-month rolling-drawdown bands for the Bear+ tab.
+
+    Computes the TRAILING 12-month rolling drawdown of the S&P 500 — how far
+    the index currently sits below its highest close in the trailing 12 months:
+        rolling_dd_t = P_t / max(P_{t-11..t}) - 1
+    and classifies each month:
+        bear        : rolling_dd <= -20%
+        correction  : -20% < rolling_dd <= -10%
+    Contiguous months of the same class are merged into a single band, so the
+    shading lines up with the actual market declines on the time axis.
+    Returns dicts with 'kind', 'start_date', 'end_date'.
+    """
+    path = Path(__file__).resolve().parent / "data" / "raw_monthly.csv"
+    if not path.exists():
+        return []
+    spx = pd.read_csv(path, index_col=0, parse_dates=True)["SPX"].dropna()
+    if spx.empty:
+        return []
+
+    rolling_peak = spx.rolling(12, min_periods=1).max()
+    rolling_dd   = spx / rolling_peak - 1.0
+
+    def _classify(v: float) -> Optional[str]:
+        if v <= -0.20:
+            return "Bear"
+        if v <= -0.10:
+            return "Correction"
+        return None
+
+    bands: list[dict[str, Any]] = []
+    run_kind: Optional[str] = None
+    run_start: Optional[pd.Timestamp] = None
+    prev_date: Optional[pd.Timestamp] = None
+
+    for raw_date, value in rolling_dd.items():
+        date = pd.Timestamp(raw_date)
+        kind = _classify(float(value))   # None for shallow / no drawdown
+        if kind != run_kind:
+            if run_kind is not None and run_start is not None:
+                bands.append({"kind": run_kind, "start_date": run_start,
+                              "end_date": prev_date + pd.DateOffset(months=1)})
+            run_kind = kind
+            run_start = date if kind is not None else None
+        prev_date = date
+    if run_kind is not None and run_start is not None:
+        bands.append({"kind": run_kind, "start_date": run_start,
+                      "end_date": prev_date + pd.DateOffset(months=1)})
+
+    return bands
+
+
+def build_rolling12_band_layers(
+    xmin: pd.Timestamp,
+    xmax: pd.Timestamp,
+) -> list[alt.Chart]:
+    """Altair rect layers for the 12-month rolling correction/bear bands."""
+    xmin = pd.Timestamp(xmin)
+    xmax = pd.Timestamp(xmax)
+    bands_all = load_rolling12_bands()
+    layers: list[alt.Chart] = []
+
+    for kind, color, opacity in (
+        ("Correction", CORRECTION_SHADE, 0.20),
+        ("Bear", BEAR_SHADE, 0.26),
+    ):
+        bands = []
+        for b in bands_all:
+            if b["kind"] != kind:
+                continue
+            s = max(pd.Timestamp(b["start_date"]), xmin)
+            e = min(pd.Timestamp(b["end_date"]), xmax)
+            if s < e:
+                bands.append({"start": s, "end": e})
+        if bands:
+            layers.append(
+                alt.Chart(pd.DataFrame(bands))
+                .mark_rect(color=color, opacity=opacity)
+                .encode(x=alt.X("start:T"), x2="end:T")
+            )
+    return layers
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_rolling6_correction_bands() -> list[dict[str, Any]]:
+    """
+    Month-level 6-month rolling-correction bands for the Correction+ tab.
+
+    Computes the TRAILING 6-month rolling drawdown of the S&P 500:
+        rolling_dd_t = P_t / max(P_{t-5..t}) - 1
+    and marks every month where it is deeper than 10% as a correction. There is
+    NO bear distinction here — any >10% drawdown is a single correction band.
+    Contiguous months are merged. Returns dicts with 'start_date', 'end_date'.
+    """
+    path = Path(__file__).resolve().parent / "data" / "raw_monthly.csv"
+    if not path.exists():
+        return []
+    spx = pd.read_csv(path, index_col=0, parse_dates=True)["SPX"].dropna()
+    if spx.empty:
+        return []
+
+    rolling_peak = spx.rolling(6, min_periods=1).max()
+    rolling_dd   = spx / rolling_peak - 1.0
+    in_corr      = rolling_dd <= -0.10
+
+    bands: list[dict[str, Any]] = []
+    run_start: Optional[pd.Timestamp] = None
+    prev_date: Optional[pd.Timestamp] = None
+    for raw_date, flag in in_corr.items():
+        date = pd.Timestamp(raw_date)
+        if flag and run_start is None:
+            run_start = date
+        elif not flag and run_start is not None:
+            bands.append({"start_date": run_start,
+                          "end_date": prev_date + pd.DateOffset(months=1)})
+            run_start = None
+        prev_date = date
+    if run_start is not None:
+        bands.append({"start_date": run_start,
+                      "end_date": prev_date + pd.DateOffset(months=1)})
+    return bands
+
+
+def build_rolling6_band_layers(
+    xmin: pd.Timestamp,
+    xmax: pd.Timestamp,
+) -> list[alt.Chart]:
+    """Altair rect layers for the 6-month rolling correction bands (no bear)."""
+    xmin = pd.Timestamp(xmin)
+    xmax = pd.Timestamp(xmax)
+    bands = []
+    for b in load_rolling6_correction_bands():
+        s = max(pd.Timestamp(b["start_date"]), xmin)
+        e = min(pd.Timestamp(b["end_date"]), xmax)
+        if s < e:
+            bands.append({"start": s, "end": e})
+    if not bands:
+        return []
+    return [
+        alt.Chart(pd.DataFrame(bands))
+        .mark_rect(color=CORRECTION_SHADE, opacity=0.20)
+        .encode(x=alt.X("start:T"), x2="end:T")
+    ]
+
+
 def build_drawdown_episode_table(episodes: list[dict[str, Any]]) -> pd.DataFrame:
     rows = []
     corrections = [episode for episode in episodes if episode["kind"] == "Correction"]
@@ -2709,7 +3267,8 @@ with header_title:
         unsafe_allow_html=True,
     )
 
-dashboard_tab, tracker_tab, allocation_tab, performance_tab, correction_tab, bear_tab = st.tabs(
+(dashboard_tab, tracker_tab, allocation_tab, performance_tab,
+ correction_tab, bear_tab) = st.tabs(
     [
         "Dashboard",
         "Indicator Tracker",
@@ -2980,20 +3539,22 @@ with performance_tab:
 
 with correction_tab:
     render_calibrated_model_page(
-        kind="correction",
+        kind="correctionplus",
         title="Correction Model",
         caption=(
-            "Six-month logistic model for S&P 500 correction risk (10–20% drawdown). "
-            "Fast positioning / volatility / financial-conditions signals."
+            "Weight-constrained logistic model for the probability of a >10% S&P 500 "
+            "drawdown within a rolling 6-month window. Fast positioning / volatility / "
+            "financial-conditions signals; Newey-West HAC inference."
         ),
     )
 
 with bear_tab:
-    render_calibrated_model_page(
-        kind="bear",
-        title="Bear Model",
+    render_ensemble_bear_page(
+        title="Bear Model — Ensemble",
         caption=(
-            "Twelve-month logistic model for S&P 500 bear-market risk (>20% drawdown). "
-            "Slow credit / yield-curve / policy signals."
+            "Probability of a >20% S&P 500 drawdown within a rolling 12-month window, "
+            "from an equal-weight ensemble of four era-trained logistic models "
+            "(1920s / 1950s / 1960s / 1980s), Platt-recalibrated. Every factor is "
+            "Newey-West HAC-significant; predictions are walk-forward out-of-sample."
         ),
     )

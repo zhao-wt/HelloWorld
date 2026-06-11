@@ -178,6 +178,14 @@ def build_bear_features(p: pd.DataFrame) -> pd.DataFrame:
     if "T10Y2Y" in p.columns:
         f["ts_10y2y"] = p["T10Y2Y"]
 
+    # Long-history 10y-3m term spread: 10y (DGS10, Shiller-extended to 1871)
+    # minus the 3m bill (TB3MS, 1934). Real back to 1934 — replaces the FRED
+    # T10Y3M-based ts_10y3m (1982) for the long-history bear model.
+    if "DGS10" in p.columns and "TB3MS" in p.columns:
+        ts_10y3m_long = p["DGS10"] - p["TB3MS"]
+        f["ts_10y3m_level"]     = ts_10y3m_long
+        f["ts_10y3m_inv_dummy"] = (ts_10y3m_long < 0).astype(float).where(ts_10y3m_long.notna())
+
     # ---- Credit ----
     if "EBP" in p.columns:
         f["ebp_level"]  = p["EBP"]
@@ -187,6 +195,47 @@ def build_bear_features(p: pd.DataFrame) -> pd.DataFrame:
         f["baa_level"]      = p["BAA10Y"]
         f["baa_3m_chg"]     = p["BAA10Y"].diff(3)
         f["baa_zscore_60m"] = _trailing_zscore(p["BAA10Y"], window=60, min_periods=36)
+
+    # ---- Credit (long history, raw Moody's yields back to 1919) ----
+    # Built from raw BAA / AAA corporate yields (1919) and the 10y Treasury
+    # (DGS10, 1871) so the credit signal is available for the long-history
+    # ensemble Model A. Wider spreads = funding stress = elevated bear risk.
+    if "BAA" in p.columns and "AAA" in p.columns:
+        baa_aaa = p["BAA"] - p["AAA"]                     # quality (default) spread
+        f["baa_aaa_spread"] = baa_aaa
+        f["baa_aaa_chg6"]   = baa_aaa.diff(6)
+        f["baa_aaa_z24"]    = _trailing_zscore(baa_aaa, window=24, min_periods=12)
+        f["baa_aaa_z60"]    = _trailing_zscore(baa_aaa, window=60, min_periods=36)
+
+    if "BAA" in p.columns and "DGS10" in p.columns:
+        baa_10y = p["BAA"] - p["DGS10"]                   # corporate default spread
+        f["baa_10y_spread"] = baa_10y
+        f["baa_10y_z24"]    = _trailing_zscore(baa_10y, window=24, min_periods=12)
+        f["baa_10y_z60"]    = _trailing_zscore(baa_10y, window=60, min_periods=36)
+
+    if "BAA" in p.columns:
+        f["baa_yield_chg6"] = p["BAA"].diff(6)            # corporate funding-cost momentum
+
+    # ---- Real economy (industrial production, 1919) ----
+    # Falling industrial production leads recessions and equity drawdowns.
+    if "INDPRO" in p.columns:
+        indpro = p["INDPRO"]
+        f["indpro_yoy"]      = indpro.pct_change(12) * 100
+        # Annualized 6-month growth: (IP_t / IP_{t-6})^2 - 1, in %
+        f["indpro_6m_growth"] = ((indpro / indpro.shift(6)) ** 2 - 1) * 100
+
+    # ---- Long rates (10y Treasury, 1871) ----
+    if "DGS10" in p.columns:
+        f["dgs10_12m_chg"] = p["DGS10"].diff(12)          # rising long rates = headwind
+
+    # ---- Labor (long history, raw unemployment rate back to 1948) ----
+    # Built from UNRATE (1948) so the labor signal is available for the
+    # ensemble Model B (1940s). Rising unemployment leads equity drawdowns.
+    if "UNRATE" in p.columns:
+        u = p["UNRATE"]
+        f["unrate_12m_chg"] = u.diff(12)                  # YoY change in unemployment
+        # Real-time Sahm rule: 3m-avg unemployment minus its trailing 12m low.
+        f["unrate_sahm"]    = u.rolling(3, min_periods=3).mean() - u.rolling(12, min_periods=12).min()
 
     # ---- Labor ----
     if "SAHMREALTIME" in p.columns:
@@ -206,9 +255,44 @@ def build_bear_features(p: pd.DataFrame) -> pd.DataFrame:
         # (official diffusion index not freely available)
         f["lei_stress_dummy"] = (f["lei_6m_growth"] < -0.04).astype(float).where(f["lei_6m_growth"].notna())
 
+    # ---- Financial conditions (Chicago Fed; modern, 1971) ----
+    # Tighter financial conditions precede equity drawdowns (for Model D).
+    if "NFCI" in p.columns:
+        f["nfci_level"]  = p["NFCI"]
+        f["nfci_3m_chg"] = p["NFCI"].diff(3)
+    if "ANFCI" in p.columns:
+        f["anfci_level"]  = p["ANFCI"]
+        f["anfci_3m_chg"] = p["ANFCI"].diff(3)
+
+    # ---- Volatility (CBOE VIX; modern, 1990) ----
+    # Elevated implied volatility flags stress regimes (for Model D).
+    if "VIXCLS" in p.columns:
+        f["vix_level"]      = p["VIXCLS"]
+        f["vix_zscore_24m"] = _trailing_zscore(p["VIXCLS"], window=24, min_periods=12)
+
     # ---- Policy ----
     if "DFF" in p.columns:
         f["ffr_6m_chg"] = p["DFF"].diff(6)
+
+    # ---- Trend (SPX, long history) ----
+    if "SPX" in p.columns:
+        f["spx_vs_10ma"] = p["SPX"] / p["SPX"].rolling(10, min_periods=6).mean() - 1
+        f["spx_12m_mom"] = p["SPX"] / p["SPX"].shift(12) - 1   # 12-month price momentum
+
+    # ---- Inflation (CPI; Chen 2009 — a top bear predictor) ----
+    if "CPI" in p.columns:
+        infl = p["CPI"].pct_change(12) * 100
+        f["infl_yoy"]          = infl
+        f["infl_zscore_120m"]  = _trailing_zscore(infl, window=120, min_periods=60)
+
+    # ---- Valuation (long history; conditions bear-market severity) ----
+    if "SHILLER_CAPE" in p.columns:
+        f["cape_20yr_pct"] = _trailing_percentile(
+            p["SHILLER_CAPE"], window=240, min_periods=120
+        )
+        f["cape_z_120m"] = _trailing_zscore(
+            p["SHILLER_CAPE"], window=120, min_periods=60
+        )
 
     return f
 
@@ -369,7 +453,8 @@ if __name__ == "__main__":
     import sys
 
     _bear_dir = Path(__file__).resolve().parent
-    csv_path  = _bear_dir / "raw_monthly.csv"
+    _data_dir = _bear_dir.parent / "data"
+    csv_path  = _data_dir / "raw_monthly.csv"
     if not csv_path.exists():
         print(f"Raw panel not found at {csv_path}. Run 'python -m bear.data' first.")
         sys.exit(1)
@@ -387,8 +472,8 @@ if __name__ == "__main__":
     summarize_features(corr_f, label="CORRECTION MODEL features")
 
     # Export to CSV for validation
-    bear_out = _bear_dir / "bear_features.csv"
-    corr_out = _bear_dir / "correction_features.csv"
+    bear_out = _data_dir / "bear_features.csv"
+    corr_out = _data_dir / "correction_features.csv"
     bear_f.to_csv(bear_out, date_format="%Y-%m-%d", float_format="%.6f")
     corr_f.to_csv(corr_out, date_format="%Y-%m-%d", float_format="%.6f")
 

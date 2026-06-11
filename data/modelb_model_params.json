@@ -1,0 +1,70 @@
+{
+  "kind": "modelb",
+  "title": "Bear \u2014 Model B (1950s)",
+  "subtitle": ">20% drawdown over next 12 months (post-war member)",
+  "horizon": 12,
+  "features": [
+    "spx_vs_10ma",
+    "infl_zscore_120m",
+    "cape_20yr_pct",
+    "dgs10_12m_chg"
+  ],
+  "signs": {
+    "spx_vs_10ma": -1,
+    "infl_zscore_120m": 1,
+    "cape_20yr_pct": 1,
+    "dgs10_12m_chg": -1
+  },
+  "labels": {
+    "spx_vs_10ma": [
+      "S&P 500 vs 10-month MA",
+      "Trend"
+    ],
+    "infl_zscore_120m": [
+      "CPI inflation, 10yr z-score",
+      "Inflation"
+    ],
+    "cape_20yr_pct": [
+      "Shiller CAPE, 20yr percentile",
+      "Valuation"
+    ],
+    "dgs10_12m_chg": [
+      "10y Treasury yield, 12m change",
+      "Rates"
+    ]
+  },
+  "coef": [
+    -0.6048926861327596,
+    0.7792011887554186,
+    0.5838428474489752,
+    -0.5097050678427051
+  ],
+  "intercept": -2.0283789890510096,
+  "mu": {
+    "spx_vs_10ma": 0.031344185387131955,
+    "infl_zscore_120m": 0.06911311559432935,
+    "cape_20yr_pct": 0.6292941712104688,
+    "dgs10_12m_chg": 0.02494365757906215
+  },
+  "sigma": {
+    "spx_vs_10ma": 0.07241134411931922,
+    "infl_zscore_120m": 1.2404433916599025,
+    "cape_20yr_pct": 0.3267547764284525,
+    "dgs10_12m_chg": 1.0635926189443021
+  },
+  "base_rate": 0.15485278080697928,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1950-01-31",
+  "hac_pvalues": {
+    "spx_vs_10ma": 0.006115055480378384,
+    "infl_zscore_120m": 0.0011567610117493299,
+    "cape_20yr_pct": 0.024921772847801282,
+    "dgs10_12m_chg": 0.025997573489511705
+  },
+  "hac_intercept_p": 3.5718095148240536e-12,
+  "hac_maxlags": 12
+}

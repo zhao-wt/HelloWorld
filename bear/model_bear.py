@@ -52,6 +52,7 @@ from sklearn.metrics import (
 # Root of the bear/ package — used to build absolute paths that work
 # regardless of which directory the script is invoked from.
 _BEAR_DIR = Path(__file__).resolve().parent
+_DATA_DIR = _BEAR_DIR.parent / "data"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -153,8 +154,8 @@ EXPECTED_SIGNS_CLEAN: dict[str, int] = {
 # ---------------------------------------------------------------------------
 
 def load_model_data(
-    features_path: Path = _BEAR_DIR / "bear_features.csv",
-    targets_path:  Path = _BEAR_DIR / "targets.csv",
+    features_path: Path = _DATA_DIR / "bear_features.csv",
+    targets_path:  Path = _DATA_DIR / "targets.csv",
     features:      list[str] = CORE_FEATURES,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """
@@ -1214,7 +1215,7 @@ if __name__ == "__main__":
 
     # Load full Phase 2 bear feature set
     all_bear = pd.read_csv(
-        _BEAR_DIR / "bear_features.csv", index_col=0, parse_dates=True
+        _DATA_DIR / "bear_features.csv", index_col=0, parse_dates=True
     )
     y_all = y.reindex(all_bear.index)
 
@@ -1427,10 +1428,10 @@ if __name__ == "__main__":
     })
     if "_best_selected_oos" in dir():
         out["prob_bear_selected_oos"] = _best_selected_oos.reindex(out.index)
-    out_path = _BEAR_DIR / "bear_model_output.csv"
+    out_path = _DATA_DIR / "bear_model_output.csv"
     out.to_csv(out_path, date_format="%Y-%m-%d", float_format="%.6f")
 
-    model_path = _BEAR_DIR / "bear_model.pkl"
+    model_path = _DATA_DIR / "bear_model.pkl"
     with open(model_path, "wb") as fh:
         pickle.dump(model, fh)
 

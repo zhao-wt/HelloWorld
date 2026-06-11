@@ -1,0 +1,87 @@
+{
+  "kind": "bear",
+  "title": "Bear Market",
+  "subtitle": ">20% drawdown over next 12 months",
+  "horizon": 12,
+  "features": [
+    "ntfs_3m_chg",
+    "ts_inv_dummy",
+    "ebp_3m_chg",
+    "baa_zscore_60m",
+    "lei_6m_growth",
+    "ffr_6m_chg",
+    "sahm_level"
+  ],
+  "signs": {
+    "ntfs_3m_chg": 1,
+    "ts_inv_dummy": 1,
+    "ebp_3m_chg": 1,
+    "baa_zscore_60m": 1,
+    "lei_6m_growth": -1,
+    "ffr_6m_chg": -1,
+    "sahm_level": 1
+  },
+  "labels": {
+    "ntfs_3m_chg": [
+      "Near-term forward spread, 3m change",
+      "Yield curve"
+    ],
+    "ts_inv_dummy": [
+      "Yield curve inversion (10y-3m < 0)",
+      "Yield curve"
+    ],
+    "ebp_3m_chg": [
+      "Excess bond premium, 3m change",
+      "Credit"
+    ],
+    "baa_zscore_60m": [
+      "BAA spread, 5yr z-score",
+      "Credit"
+    ],
+    "lei_6m_growth": [
+      "Leading indicator, 6m growth",
+      "Leading"
+    ],
+    "ffr_6m_chg": [
+      "Fed funds rate, 6m change",
+      "Policy"
+    ],
+    "sahm_level": [
+      "Sahm rule (unemployment momentum)",
+      "Labor"
+    ]
+  },
+  "coef": [
+    0.4806787547584258,
+    0.3823159016145986,
+    0.25264257025819464,
+    0.5927772934299533,
+    -0.24405921714986326,
+    -0.24405921715216555,
+    0.24405921714476567
+  ],
+  "intercept": -2.068999953660525,
+  "mu": {
+    "ntfs_3m_chg": -0.007010612975391508,
+    "ts_inv_dummy": 0.1342281879194631,
+    "ebp_3m_chg": -0.002787469798657716,
+    "baa_zscore_60m": -0.13809073378076062,
+    "lei_6m_growth": 0.00020312080536912758,
+    "ffr_6m_chg": -0.05651006711409396,
+    "sahm_level": 0.3957270693512305
+  },
+  "sigma": {
+    "ntfs_3m_chg": 0.5239154085007448,
+    "ts_inv_dummy": 0.3412792759985305,
+    "ebp_3m_chg": 0.3893869394003566,
+    "baa_zscore_60m": 1.246553511390122,
+    "lei_6m_growth": 0.023827963806424192,
+    "ffr_6m_chg": 0.8499812128030577,
+    "sahm_level": 1.0738432494759091
+  },
+  "base_rate": 0.15436241610738255,
+  "min_w": 0.1,
+  "max_w": 0.4,
+  "model_type": "logistic",
+  "value_kind": "probability"
+}

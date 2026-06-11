@@ -1,0 +1,383 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+         color: #18211b; font-size: 11pt; line-height: 1.45; }
+  h1 { color: #173f2a; font-size: 20pt; border-bottom: 3px solid #b68a35;
+       padding-bottom: 6px; }
+  h2 { color: #173f2a; font-size: 15pt; margin-top: 1.4em;
+       border-bottom: 1px solid #dce3dd; padding-bottom: 3px; }
+  h3 { color: #24563a; font-size: 12.5pt; margin-top: 1.1em; }
+  table { border-collapse: collapse; width: 100%; margin: 0.8em 0;
+          font-size: 9.5pt; }
+  th, td { border: 1px solid #dce3dd; padding: 5px 8px; text-align: left; }
+  th { background: #f3f4f6; }
+  td:not(:first-child), th:not(:first-child) { text-align: right; }
+  img { max-width: 100%; display: block; margin: 0.6em auto; }
+  code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px;
+         font-size: 9.5pt; }
+  em { color: #5d675f; }
+  h2, h3, table, img { page-break-inside: avoid; }
+</style>
+
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head><body><h1>Bear Model — Technical Documentation</h1>
+<p><em>Generated from <code>bear/bear_features.csv</code> and <code>bear/targets.csv</code>. Reproduce with <code>python -m bear.make_docs</code>.</em></p>
+<h2>1. Overview</h2>
+<ul>
+<li><strong>Objective:</strong> estimate a binary <strong>12-month rolling correction</strong>, $y_t = \mathbf{1}\{\mathrm{MDD}_t \le -10\%\}$, i.e. any drawdown deeper than 10% over the rolling 12-month forward window.</li>
+<li><strong>Model:</strong> weight-constrained binary logistic on standardized factors, signs fixed to economic priors, calibrated to the base rate.</li>
+<li><strong>Horizon:</strong> 12 months (rolling forward window).</li>
+<li><strong>Sample:</strong> 1910-01-31 → 2026-06-30 (1397 complete monthly observations).</li>
+<li><strong>Historical base rate:</strong> 20.8%.</li>
+<li><strong>Current reading (2026-06-30):</strong> P(event) = <strong>16.6%</strong>.</li>
+<li><strong>Inference:</strong> Newey-West HAC, max lag = 12 months.</li>
+</ul>
+<h2>2. Feature Engineering</h2>
+<p>All raw series are monthly (daily/weekly series are sampled to month-end), shifted forward by their real-world publication lag to prevent look-ahead, and transformed to stationary form. Each factor is then standardized on the training sample, $\tilde{x}_{i,t} = (x_{i,t}-\mu_i)/\sigma_i$.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Factor</th>
+<th>Raw series</th>
+<th>Transformation</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>infl_zscore_120m</code></td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>infl_yoy</code></td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>spx_vs_10ma</code></td>
+<td>S&amp;P 500 price (monthly close)</td>
+<td>% deviation from 10-month MA (≈ 200-day)</td>
+<td>Trend deterioration; price below the long MA is risk-off (Moskowitz-Ooi-Pedersen 2012).</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>cape_z_120m</code></td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Forward drawdown target (rolling window):</p>
+<p>$$\mathrm{MDD}_t = \min_{t &lt; u \le t+12}\left(\frac{P_u}{\max_{t&lt;v\le u}P_v}-1\right)$$</p>
+<h2>3. Constrained Logistic Model</h2>
+<p><strong>Link / specification:</strong></p>
+<p>$$\hat{p}_t = \Pr(y_t=1) = \sigma(z_t) = \frac{1}{1+e^{-z_t}}$$</p>
+<p>$$z_t = \beta_0 + \sum_{i=1}^{4} \beta_i\,\tilde{x}_{i,t}$$</p>
+<p><strong>Estimation:</strong> coefficients are written as $\beta_i = \mathrm{sign}_i \cdot \gamma_i$ with $\gamma_i \ge 0$ (signs fixed to economic priors), fitted by maximizing the Bernoulli likelihood subject to per-factor weight bounds:</p>
+<p>$$w_i = \frac{|\beta_i|}{\sum_j |\beta_j|}, \qquad 0\% \le w_i \le 100\%$$</p>
+<p><strong>Fitted model:</strong></p>
+<p>$$z_t = -1.625 +1.139\,\tilde{x}_{1} -1.195\,\tilde{x}_{2} -0.480\,\tilde{x}_{3} +0.378\,\tilde{x}_{4}$$</p>
+<p><strong>Fitted coefficients</strong> (sorted by weight):</p>
+<table>
+<thead>
+<tr>
+<th>Factor</th>
+<th style="text-align: right;">Coefficient $\beta_i$</th>
+<th style="text-align: right;">Weight $w_i$</th>
+<th style="text-align: right;">p (HAC)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>infl_yoy</code></td>
+<td style="text-align: right;">-1.1947</td>
+<td style="text-align: right;">37.4%</td>
+<td style="text-align: right;">0.002 *</td>
+</tr>
+<tr>
+<td><code>infl_zscore_120m</code></td>
+<td style="text-align: right;">+1.1392</td>
+<td style="text-align: right;">35.7%</td>
+<td style="text-align: right;">0.000 *</td>
+</tr>
+<tr>
+<td><code>spx_vs_10ma</code></td>
+<td style="text-align: right;">-0.4801</td>
+<td style="text-align: right;">15.0%</td>
+<td style="text-align: right;">0.016 *</td>
+</tr>
+<tr>
+<td><code>cape_z_120m</code></td>
+<td style="text-align: right;">+0.3775</td>
+<td style="text-align: right;">11.8%</td>
+<td style="text-align: right;">0.114</td>
+</tr>
+<tr>
+<td><em>intercept</em></td>
+<td style="text-align: right;">-1.6255</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">—</td>
+</tr>
+</tbody>
+</table>
+<p><code>*</code> p&lt;0.05  ·  <code>.</code> p&lt;0.10  (Newey-West HAC, max lag = 12).</p>
+<h2>4. Regression Performance</h2>
+<h3>4.1 Specification</h3>
+<ul>
+<li><strong>Form:</strong> binary logistic, identity-of-weights constraint $w_i \in [0\%, 100\%]$, 4 factors, signs fixed.</li>
+<li><strong>Autocorrelation:</strong> the 12-month rolling target overlaps across consecutive months (consecutive observations share 11/12 of their window). Standard errors are Newey-West <strong>HAC</strong>-corrected with a Bartlett kernel and max lag = 12 months.</li>
+<li><strong>Calibration:</strong> fitted by natural-weight likelihood, so the output is calibrated to the 20.8% base rate.</li>
+</ul>
+<h3>4.2 Sensitivity</h3>
+<p>Marginal effect of a <strong>+1 standard-deviation</strong> move in each factor on the model output, evaluated at the current reading ($\partial \hat{y} = \hat{y}(1-\hat{y})\,\beta_i$, $\hat{y}=0.166$):</p>
+<table>
+<thead>
+<tr>
+<th>Factor</th>
+<th style="text-align: right;">$\beta_i$</th>
+<th style="text-align: right;">Weight</th>
+<th style="text-align: right;">Δ output / +1 SD</th>
+<th style="text-align: right;">p (HAC)</th>
+<th>Push</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPI inflation, YoY %</td>
+<td style="text-align: right;">-1.1947</td>
+<td style="text-align: right;">37.4%</td>
+<td style="text-align: right;">-0.1650 (-16.50 pp)</td>
+<td style="text-align: right;">0.002</td>
+<td>Bullish</td>
+</tr>
+<tr>
+<td>CPI inflation, 10yr z-score</td>
+<td style="text-align: right;">+1.1392</td>
+<td style="text-align: right;">35.7%</td>
+<td style="text-align: right;">+0.1574 (+15.74 pp)</td>
+<td style="text-align: right;">0.000</td>
+<td>Bearish</td>
+</tr>
+<tr>
+<td>S&amp;P 500 vs 10-month MA</td>
+<td style="text-align: right;">-0.4801</td>
+<td style="text-align: right;">15.0%</td>
+<td style="text-align: right;">-0.0663 (-6.63 pp)</td>
+<td style="text-align: right;">0.016</td>
+<td>Bullish</td>
+</tr>
+<tr>
+<td>Shiller CAPE, 10yr z-score</td>
+<td style="text-align: right;">+0.3775</td>
+<td style="text-align: right;">11.8%</td>
+<td style="text-align: right;">+0.0522 (+5.22 pp)</td>
+<td style="text-align: right;">0.114</td>
+<td>Bearish</td>
+</tr>
+</tbody>
+</table>
+<h3>4.3 Area Under the Curve (AUC)</h3>
+<p>Discrimination is measured against the realized event (<em>Bear event: 12-month drawdown &gt; 20%</em>); the predicted probability is the ranking score.</p>
+<table>
+<thead>
+<tr>
+<th>Sample</th>
+<th style="text-align: right;">AUC</th>
+<th style="text-align: right;">N</th>
+<th style="text-align: right;">Events</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>In-sample</td>
+<td style="text-align: right;">0.764</td>
+<td style="text-align: right;">1397</td>
+<td style="text-align: right;">290</td>
+</tr>
+<tr>
+<td>Out-of-sample (walk-forward)</td>
+<td style="text-align: right;">0.780</td>
+<td style="text-align: right;">1097</td>
+<td style="text-align: right;">207</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="ROC curve" src="bearplus_roc.png" /></p>
+<h2>5. Charts</h2>
+<h3>5.1 In-sample fit</h3>
+<p>Fitted values across the full sample (parameters estimated on the full sample). Shaded spans mark the realized rolling-window event.</p>
+<p><img alt="In-sample" src="bearplus_insample.png" /></p>
+<h3>5.2 Out-of-sample (walk-forward)</h3>
+<p>Expanding-window estimate: at each month the model is re-fit on prior data only, then predicts that month (no look-ahead).</p>
+<p><img alt="Out-of-sample" src="bearplus_oos.png" /></p>
+<h2>6. Appendix — Realized Bear Events</h2>
+<p>The 290 event-months in the AUC sample (signal months whose 12-month forward drawdown exceeded 20%) group into <strong>19 distinct episodes</strong>. <em>Start</em>/<em>End</em> are the first and last signal months of each run; <em>Worst drawdown</em> is the deepest 12-month forward drawdown observed during the episode.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Start</th>
+<th>End</th>
+<th style="text-align: right;">Signal months</th>
+<th style="text-align: right;">Worst drawdown</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>1916-09</td>
+<td>1917-07</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">-28.9%</td>
+</tr>
+<tr>
+<td>2</td>
+<td>1919-12</td>
+<td>1920-03</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">-22.9%</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1928-10</td>
+<td>1934-05</td>
+<td style="text-align: right;">68</td>
+<td style="text-align: right;">-71.2%</td>
+</tr>
+<tr>
+<td>4</td>
+<td>1936-09</td>
+<td>1939-02</td>
+<td style="text-align: right;">30</td>
+<td style="text-align: right;">-52.0%</td>
+</tr>
+<tr>
+<td>5</td>
+<td>1939-05</td>
+<td>1940-04</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">-31.9%</td>
+</tr>
+<tr>
+<td>6</td>
+<td>1940-12</td>
+<td>1941-11</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">-28.7%</td>
+</tr>
+<tr>
+<td>7</td>
+<td>1945-09</td>
+<td>1946-07</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">-27.7%</td>
+</tr>
+<tr>
+<td>8</td>
+<td>1956-10</td>
+<td>1957-06</td>
+<td style="text-align: right;">9</td>
+<td style="text-align: right;">-20.7%</td>
+</tr>
+<tr>
+<td>9</td>
+<td>1961-05</td>
+<td>1962-04</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">-28.0%</td>
+</tr>
+<tr>
+<td>10</td>
+<td>1965-08</td>
+<td>1966-03</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">-22.2%</td>
+</tr>
+<tr>
+<td>11</td>
+<td>1969-04</td>
+<td>1970-03</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">-32.7%</td>
+</tr>
+<tr>
+<td>12</td>
+<td>1972-11</td>
+<td>1973-02</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">-23.4%</td>
+</tr>
+<tr>
+<td>13</td>
+<td>1973-05</td>
+<td>1974-07</td>
+<td style="text-align: right;">15</td>
+<td style="text-align: right;">-43.0%</td>
+</tr>
+<tr>
+<td>14</td>
+<td>1981-03</td>
+<td>1981-03</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">-21.4%</td>
+</tr>
+<tr>
+<td>15</td>
+<td>1986-10</td>
+<td>1987-09</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">-33.5%</td>
+</tr>
+<tr>
+<td>16</td>
+<td>2000-03</td>
+<td>2002-06</td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">-34.7%</td>
+</tr>
+<tr>
+<td>17</td>
+<td>2007-07</td>
+<td>2009-01</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: right;">-52.6%</td>
+</tr>
+<tr>
+<td>18</td>
+<td>2019-03</td>
+<td>2020-02</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">-33.9%</td>
+</tr>
+<tr>
+<td>19</td>
+<td>2021-06</td>
+<td>2022-03</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">-25.4%</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td><strong>Total</strong></td>
+<td style="text-align: right;"><strong>290</strong></td>
+<td style="text-align: right;"></td>
+</tr>
+</tbody>
+</table></body></html>

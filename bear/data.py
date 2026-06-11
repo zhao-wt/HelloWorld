@@ -329,6 +329,165 @@ def fetch_shiller_cape(cache_dir: Path) -> pd.Series:
     return series
 
 
+def fetch_shiller_spx(cache_dir: Path) -> pd.Series:
+    """
+    Long-history monthly S&P 500 (composite) price from Robert Shiller's dataset.
+
+    Reads the 'Comp.' column (labeled 'P') of ie_data.xls — the nominal S&P
+    composite price, monthly, back to 1871. This is the standard long-history
+    equity-index series (monthly average / period close), far longer than the
+    Yahoo ^GSPC history (1927) or FRED SP500 (free-tier window).
+
+    Returns a month-indexed Series named 'SHILLER_SPX'.
+    """
+    cache_path = cache_dir / "shiller_spx.pkl"
+    cached = _load_cache(cache_path)
+    if cached is not None:
+        return cached
+
+    source = _SHILLER_LOCAL if _SHILLER_LOCAL.exists() else cache_dir / "shiller_ie_data.xls"
+    if not source.exists():
+        resp = requests.get(_SHILLER_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+        resp.raise_for_status()
+        source.write_bytes(resp.content)
+
+    df = pd.read_excel(source, sheet_name="Data", header=6)
+    date_col  = df.columns[0]                 # decimal year (e.g. 1871.01)
+    price_col = "Comp." if "Comp." in df.columns else df.columns[1]
+
+    def _decimal_year_to_ts(v: float) -> pd.Timestamp:
+        yr = int(v)
+        mo = min(max(int(round((v - yr) * 100)), 1), 12)
+        return pd.Timestamp(year=yr, month=mo, day=1)
+
+    num_dates = pd.to_numeric(df[date_col], errors="coerce")
+    num_px    = pd.to_numeric(df[price_col], errors="coerce")
+    mask = num_dates.between(1871, 2035) & num_px.notna()
+    series = pd.Series(
+        num_px[mask].astype(float).values,
+        index=num_dates[mask].apply(_decimal_year_to_ts),
+        name="SHILLER_SPX",
+    ).sort_index().dropna()
+    # snap to month-end to align with the rest of the monthly panel
+    series.index = series.index + pd.offsets.MonthEnd(0)
+
+    _save_cache(cache_path, series)
+    return series
+
+
+def fetch_shiller_gs10(cache_dir: Path) -> pd.Series:
+    """
+    Long-history monthly 10-year Treasury (long-term interest) rate from
+    Robert Shiller's dataset — the 'Rate GS10' / 'Interest' column of
+    ie_data.xls, monthly back to 1871. Used to extend FRED's DGS10 (1962).
+
+    Returns a month-indexed Series named 'SHILLER_GS10' (percent per year).
+    """
+    cache_path = cache_dir / "shiller_gs10.pkl"
+    cached = _load_cache(cache_path)
+    if cached is not None:
+        return cached
+
+    source = _SHILLER_LOCAL if _SHILLER_LOCAL.exists() else cache_dir / "shiller_ie_data.xls"
+    if not source.exists():
+        resp = requests.get(_SHILLER_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+        resp.raise_for_status()
+        source.write_bytes(resp.content)
+
+    df = pd.read_excel(source, sheet_name="Data", header=6)
+    date_col = df.columns[0]
+    # 'Interest' column carries the long-term 10y rate (sub-header 'Rate GS10').
+    rate_col = "Interest" if "Interest" in df.columns else None
+    if rate_col is None:
+        raise ValueError("Shiller long-rate (Interest / Rate GS10) column not found")
+
+    def _decimal_year_to_ts(v: float) -> pd.Timestamp:
+        yr = int(v)
+        mo = min(max(int(round((v - yr) * 100)), 1), 12)
+        return pd.Timestamp(year=yr, month=mo, day=1)
+
+    num_dates = pd.to_numeric(df[date_col], errors="coerce")
+    num_rate  = pd.to_numeric(df[rate_col], errors="coerce")
+    mask = num_dates.between(1871, 2035) & num_rate.notna()
+    series = pd.Series(
+        num_rate[mask].astype(float).values,
+        index=num_dates[mask].apply(_decimal_year_to_ts),
+        name="SHILLER_GS10",
+    ).sort_index().dropna()
+    series.index = series.index + pd.offsets.MonthEnd(0)
+
+    _save_cache(cache_path, series)
+    return series
+
+
+def fetch_shiller_cpi(cache_dir: Path) -> pd.Series:
+    """
+    Long-history monthly CPI from Robert Shiller's dataset — the 'Index'
+    column (sub-header 'CPI') of ie_data.xls, monthly back to 1871. Enables a
+    long-history inflation factor (Chen 2009: inflation is a top bear predictor).
+    Returns a month-indexed Series named 'CPI'.
+    """
+    cache_path = cache_dir / "shiller_cpi.pkl"
+    cached = _load_cache(cache_path)
+    if cached is not None:
+        return cached
+
+    source = _SHILLER_LOCAL if _SHILLER_LOCAL.exists() else cache_dir / "shiller_ie_data.xls"
+    if not source.exists():
+        resp = requests.get(_SHILLER_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+        resp.raise_for_status()
+        source.write_bytes(resp.content)
+
+    df = pd.read_excel(source, sheet_name="Data", header=6)
+    date_col = df.columns[0]
+    cpi_col  = "Index" if "Index" in df.columns else None
+    if cpi_col is None:
+        raise ValueError("Shiller CPI ('Index') column not found")
+
+    def _decimal_year_to_ts(v: float) -> pd.Timestamp:
+        yr = int(v)
+        mo = min(max(int(round((v - yr) * 100)), 1), 12)
+        return pd.Timestamp(year=yr, month=mo, day=1)
+
+    num_dates = pd.to_numeric(df[date_col], errors="coerce")
+    num_cpi   = pd.to_numeric(df[cpi_col], errors="coerce")
+    mask = num_dates.between(1871, 2035) & num_cpi.notna()
+    series = pd.Series(
+        num_cpi[mask].astype(float).values,
+        index=num_dates[mask].apply(_decimal_year_to_ts),
+        name="CPI",
+    ).sort_index().dropna()
+    series.index = series.index + pd.offsets.MonthEnd(0)
+
+    _save_cache(cache_path, series)
+    return series
+
+
+def _chain_rate(fred_monthly: pd.Series, shiller_monthly: pd.Series) -> pd.Series:
+    """
+    Chain a long-history monthly rate (Shiller) in front of a FRED rate.
+
+    Rates are additive (not multiplicative), so the early Shiller segment is
+    shifted by a small additive offset to match the FRED level exactly at the
+    splice month (the two series differ by only a few bp there).
+    """
+    fm = fred_monthly.dropna()
+    if shiller_monthly is None or shiller_monthly.empty:
+        return fm
+    if fm.empty:
+        return shiller_monthly
+    splice = fm.index[0]
+    sm = shiller_monthly.copy()
+    sm.index = pd.to_datetime(sm.index) + pd.offsets.MonthEnd(0)
+    offset = 0.0
+    if splice in sm.index:
+        offset = float(fm.iloc[0]) - float(sm.loc[splice])
+    pre = sm[sm.index < splice] + offset
+    chained = pd.concat([pre, fm]).sort_index()
+    chained = chained[~chained.index.duplicated(keep="last")]
+    return chained.rename(fred_monthly.name)
+
+
 # ---------------------------------------------------------------------------
 # GSW zero-coupon yield curve → Near-Term Forward Spread (NTFS)
 # ---------------------------------------------------------------------------
@@ -637,8 +796,12 @@ def _parse_cpce_csv(path: Path) -> pd.Series:
 _BEAR_FRED: dict[str, tuple[str, str]] = {
     "T10Y3M":           ("eop", "10y-3m term spread (Estrella-Mishkin)"),
     "T10Y2Y":           ("eop", "10y-2y term spread"),
-    "DGS3MO":           ("eop", "3-month T-bill yield (base for NTFS)"),
+    "DGS3MO":           ("eop", "3-month CMT yield (1981+, base for NTFS)"),
+    "TB3MS":            ("eop", "3-month T-bill rate, long history (1934+, discount basis)"),
     "DGS10":            ("eop", "10-year Treasury yield"),
+    "BAA":              ("eop", "Moody's Baa corporate bond yield (1919+)"),
+    "AAA":              ("eop", "Moody's Aaa corporate bond yield (1919+)"),
+    "INDPRO":           ("eop", "Industrial production: total index (1919+)"),
     "BAMLH0A0HYM2":     ("eop", "HY OAS (FRED free tier ~3yr; BAA10Y used for full history)"),
     "SAHMREALTIME":     ("avg", "Sahm rule real-time vintage"),
     "ICSA":             ("avg", "Initial jobless claims — monthly avg of weekly readings"),
@@ -656,6 +819,35 @@ _CORRECTION_FRED: dict[str, tuple[str, str]] = {
     "NFCI":    ("avg", "National Financial Conditions Index — monthly avg"),
     "SP500":   ("eop", "S&P 500 index level (FRED monthly)"),
 }
+
+
+def _chain_spx(yahoo_daily: pd.Series, shiller_monthly: pd.Series) -> pd.Series:
+    """
+    Build a continuous monthly S&P 500 series:
+      * Yahoo ^GSPC daily, resampled to month-end, from its start (1927) onward
+      * Shiller composite price (monthly) for the earlier history (1871–1926)
+
+    Shiller's pre-1927 segment is ratio-adjusted to match Yahoo at the splice
+    month so the chained level is continuous (Shiller is a monthly average,
+    Yahoo a month-end close, so their absolute levels differ slightly).
+    """
+    ym = yahoo_daily.resample("ME").last().dropna()
+    if shiller_monthly is None or shiller_monthly.empty:
+        return ym.rename("SPX")
+    if ym.empty:
+        return shiller_monthly.rename("SPX")
+
+    splice = ym.index[0]                      # first Yahoo month-end
+    sm = shiller_monthly.copy()
+    sm.index = pd.to_datetime(sm.index) + pd.offsets.MonthEnd(0)
+    factor = 1.0
+    if splice in sm.index and sm.loc[splice] != 0:
+        factor = float(ym.loc[splice]) / float(sm.loc[splice])
+
+    pre = sm[sm.index < splice] * factor      # rescale early Shiller to splice
+    chained = pd.concat([pre, ym]).sort_index()
+    chained = chained[~chained.index.duplicated(keep="last")]
+    return chained.rename("SPX")
 
 
 def fetch_all_raw(config: DataConfig) -> dict[str, pd.Series]:
@@ -704,14 +896,37 @@ def fetch_all_raw(config: DataConfig) -> dict[str, pd.Series]:
             warnings.warn(f"  FAIL  FRED '{sid}': {exc}", stacklevel=2)
         time.sleep(0.5)
 
-    # -- S&P 500 prices (Yahoo Finance — daily; resampled in align_to_monthly) --
+    # -- Extend TB3MS (1934+) with NBER 3-6m Treasury yield (1920-1934) --
     print(f"\n{'='*60}")
-    print("  Fetching SPX prices from Yahoo Finance (daily → resampled monthly)")
+    print("  Extending TB3MS with NBER 3-6m Treasury yield (1920+)")
     print(f"{'='*60}")
     try:
-        raw["SPX"] = fetch_spx(config.start, config.end, config.cache_dir)
+        if "TB3MS" in raw:
+            nber_3m = fetch_fred_series(
+                "M1329AUSM193NNBR", config.start, config.end,
+                config.fred_api_key, config.cache_dir, frequency="m", aggregation_method="eop",
+            )
+            raw["TB3MS"] = _chain_rate(raw["TB3MS"], nber_3m)
+            s = raw["TB3MS"]
+            print(f"  OK  TB3MS (NBER+FRED)    {len(s):>5} monthly obs  "
+                  f"{s.index[0].date()} to {s.index[-1].date()}")
+    except Exception as exc:
+        warnings.warn(f"  FAIL  TB3MS extension: {exc}", stacklevel=2)
+
+    # -- S&P 500 prices: Shiller monthly (pre-1927) chained with Yahoo daily --
+    print(f"\n{'='*60}")
+    print("  Building long-history SPX: Shiller (1871+) chained with Yahoo daily")
+    print(f"{'='*60}")
+    try:
+        yahoo_daily = fetch_spx(config.start, config.end, config.cache_dir)
+        try:
+            shiller_spx = fetch_shiller_spx(config.cache_dir)
+        except Exception as exc:
+            warnings.warn(f"  Shiller SPX unavailable ({exc}); using Yahoo only", stacklevel=2)
+            shiller_spx = pd.Series(dtype=float)
+        raw["SPX"] = _chain_spx(yahoo_daily, shiller_spx)
         s = raw["SPX"]
-        print(f"  OK  SPX (^GSPC)          {len(s):>5} daily obs  "
+        print(f"  OK  SPX (Shiller+Yahoo)  {len(s):>5} monthly obs  "
               f"{s.index[0].date()} to {s.index[-1].date()}")
     except Exception as exc:
         warnings.warn(f"  FAIL  SPX: {exc}", stacklevel=2)
@@ -728,19 +943,46 @@ def fetch_all_raw(config: DataConfig) -> dict[str, pd.Series]:
     except Exception as exc:
         warnings.warn(f"  FAIL  Shiller CAPE: {exc}", stacklevel=2)
 
-    # -- GSW zero-coupon → NTFS (daily; resampled in align_to_monthly) --
+    # -- Shiller CPI (monthly, 1871+) for a long-history inflation factor --
     print(f"\n{'='*60}")
-    print("  Computing NTFS from GSW zero-coupon curve (daily → resampled monthly)")
+    print("  Fetching Shiller CPI (monthly, back to 1871)")
+    print(f"{'='*60}")
+    try:
+        raw["CPI"] = fetch_shiller_cpi(config.cache_dir)
+        s = raw["CPI"]
+        print(f"  OK  CPI                 {len(s):>5} monthly obs  "
+              f"{s.index[0].date()} to {s.index[-1].date()}")
+    except Exception as exc:
+        warnings.warn(f"  FAIL  Shiller CPI: {exc}", stacklevel=2)
+
+    # -- Extend DGS10 (1962+) with Shiller long 10y rate (1871+) --
+    print(f"\n{'='*60}")
+    print("  Extending DGS10 with Shiller long 10y rate (1871+)")
+    print(f"{'='*60}")
+    try:
+        if "DGS10" in raw:
+            gs10_long = fetch_shiller_gs10(config.cache_dir)
+            raw["DGS10"] = _chain_rate(raw["DGS10"], gs10_long)
+            s = raw["DGS10"]
+            print(f"  OK  DGS10 (Shiller+FRED) {len(s):>5} monthly obs  "
+                  f"{s.index[0].date()} to {s.index[-1].date()}")
+        else:
+            warnings.warn("  DGS10 not available to extend", stacklevel=2)
+    except Exception as exc:
+        warnings.warn(f"  FAIL  DGS10 extension: {exc}", stacklevel=2)
+
+    # -- GSW zero-coupon → NTFS (daily; resampled in align_to_monthly) --
+    # Use DTB3 (3M T-bill, DAILY, from 1954) as the short-rate base so NTFS
+    # runs from the GSW curve start (1961) rather than 1981 (DGS3MO start).
+    print(f"\n{'='*60}")
+    print("  Computing NTFS from GSW curve + DTB3 3M bill (1961+, daily → monthly)")
     print(f"{'='*60}")
     try:
         gsw_df = fetch_gsw_zero_coupon(config.cache_dir, config.gsw_url, config.request_timeout)
-        tbill_daily = raw.get("DGS3MO")
-        if tbill_daily is None:
-            # DGS3MO was fetched monthly — fetch daily for NTFS computation only
-            tbill_daily = fetch_fred_series(
-                "DGS3MO", config.start, config.end, config.fred_api_key,
-                config.cache_dir / "ntfs_helper",
-            )
+        tbill_daily = fetch_fred_series(            # native (daily) frequency
+            "DTB3", config.start, config.end, config.fred_api_key,
+            config.cache_dir / "ntfs_helper",
+        )
         raw["NTFS"] = compute_ntfs(gsw_df, tbill_daily)
         s = raw["NTFS"]
         print(f"  OK  NTFS                {len(s):>5} daily obs  "
@@ -911,13 +1153,13 @@ def align_to_monthly(raw: dict[str, pd.Series]) -> pd.DataFrame:
     # Column order: yield curve → credit → labor → leading → policy →
     # volatility → financial conditions → valuation → sentiment → price
     preferred_order = [
-        "NTFS", "T10Y3M", "T10Y2Y", "DGS3MO", "DGS10",
-        "BAA10Y", "BAMLH0A0HYM2", "EBP",
+        "NTFS", "T10Y3M", "T10Y2Y", "DGS3MO", "TB3MS", "DGS10",
+        "BAA", "AAA", "BAA10Y", "BAMLH0A0HYM2", "EBP", "INDPRO",
         "SAHMREALTIME", "UNRATE", "ICSA",
         "USALOLITOAASTSAM", "DFF",
         "VIXCLS", "VXVCLS",
         "ANFCI", "NFCI",
-        "SHILLER_CAPE", "CPCE",
+        "SHILLER_CAPE", "CPI", "CPCE",
         "SPX", "SP500",
     ]
     ordered = [c for c in preferred_order if c in df.columns]
@@ -945,11 +1187,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     _bear_dir = Path(__file__).resolve().parent
+    _data_dir = _bear_dir.parent / "data"
     cfg = DataConfig(
         fred_api_key=api_key,
         start=date(1900, 1, 1),
         end=date.today(),
-        cache_dir=_bear_dir / "cache",
+        cache_dir=_data_dir / "cache",
     )
 
     raw = fetch_all_raw(cfg)
@@ -967,9 +1210,11 @@ if __name__ == "__main__":
     print("  Aligning to monthly (month-end) and exporting CSV")
     print(f"{'='*60}")
     monthly_df = align_to_monthly(raw)
-    # Clip to cfg.start so SHILLER_CAPE (1900) doesn't dominate the index
-    monthly_df = monthly_df[monthly_df.index >= pd.Timestamp(cfg.start)]
-    out_path = _bear_dir / "raw_monthly.csv"
+    # Keep the full long-history SPX (Shiller starts 1871); other columns are
+    # simply NaN in the early years.
+    panel_start = pd.Timestamp("1871-01-01")
+    monthly_df = monthly_df[monthly_df.index >= panel_start]
+    out_path = _data_dir / "raw_monthly.csv"
     monthly_df.to_csv(out_path, date_format="%Y-%m-%d", float_format="%.6f")
     print(f"  Wrote {len(monthly_df)} rows x {len(monthly_df.columns)} columns")
     print(f"  Date range : {monthly_df.index[0].date()} to {monthly_df.index[-1].date()}")

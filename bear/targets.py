@@ -33,6 +33,45 @@ import pandas as pd
 
 
 # ---------------------------------------------------------------------------
+# Long-history price chain (Shiller monthly + Yahoo daily)
+# ---------------------------------------------------------------------------
+
+def load_chained_prices(cache_dir: Path) -> pd.Series:
+    """
+    Build the long-history price series used for drawdown targets:
+
+      * Yahoo ^GSPC DAILY from its start (1927) onward — full daily resolution
+        so modern drawdowns are accurate (e.g. COVID -34% intra-month).
+      * Shiller composite MONTHLY for 1871-1926, ratio-adjusted at the splice
+        so the level is continuous. Pre-1927 drawdowns are monthly-resolution.
+
+    Returns a price Series (mixed monthly-then-daily) suitable for
+    compute_forward_mdd.
+    """
+    from datetime import date
+    from bear.data import fetch_spx, fetch_shiller_spx
+
+    yahoo = fetch_spx(date(1900, 1, 1), date.today(), cache_dir)
+    try:
+        shiller = fetch_shiller_spx(cache_dir)
+    except Exception:
+        return yahoo
+
+    ym = yahoo.resample("ME").last().dropna()
+    if ym.empty:
+        return shiller
+    splice = ym.index[0]
+    factor = 1.0
+    if splice in shiller.index and float(shiller.loc[splice]) != 0:
+        factor = float(ym.iloc[0]) / float(shiller.loc[splice])
+    pre = shiller[shiller.index < splice] * factor      # monthly, pre-1927
+    combined = pd.concat([pre, yahoo]).sort_index()
+    combined = combined[~combined.index.duplicated(keep="last")]
+    combined.name = "SPX"
+    return combined
+
+
+# ---------------------------------------------------------------------------
 # Core MDD computation
 # ---------------------------------------------------------------------------
 
@@ -214,32 +253,19 @@ def non_overlapping_sample(
 
 if __name__ == "__main__":
     import sys
-    import pickle
-    import hashlib
-    from datetime import date
 
     _bear_dir = Path(__file__).resolve().parent
+    _data_dir = _bear_dir.parent / "data"
+    cache_dir  = _data_dir / "cache"
 
-    # -- Locate daily SPX cache from Phase 1 --
-    cache_dir  = _bear_dir / "cache"
-    start_date = date(1900, 1, 1)
-    end_date   = date.today()
-    key  = hashlib.md5(f"SPX|{start_date}|{end_date}".encode()).hexdigest()[:10]
-    spx_cache = cache_dir / f"SPX_{key}.pkl"
-
-    if not spx_cache.exists():
-        print(f"Daily SPX cache not found at {spx_cache}.")
-        print("Run 'python -m bear.data' first to populate the cache.")
-        sys.exit(1)
-
-    with open(spx_cache, "rb") as fh:
-        spx_daily: pd.Series = pickle.load(fh)
-
-    print(f"Loaded daily SPX: {len(spx_daily)} obs  "
-          f"({spx_daily.index[0].date()} to {spx_daily.index[-1].date()})")
+    # -- Long-history chained prices: Shiller monthly (1871+) + Yahoo daily --
+    spx_daily = load_chained_prices(cache_dir)
+    print(f"Chained prices: {len(spx_daily)} obs  "
+          f"({spx_daily.index[0].date()} to {spx_daily.index[-1].date()})  "
+          f"[Shiller monthly pre-1927, Yahoo daily after]")
 
     # -- Load monthly dates from Phase 1 output --
-    raw_path = _bear_dir / "raw_monthly.csv"
+    raw_path = _data_dir / "raw_monthly.csv"
     if not raw_path.exists():
         print(f"Raw panel not found at {raw_path}. Run 'python -m bear.data' first.")
         sys.exit(1)
@@ -300,6 +326,6 @@ if __name__ == "__main__":
     print(pd.DataFrame(rows).to_string(index=False))
 
     # -- Export --
-    out_path = _bear_dir / "targets.csv"
+    out_path = _data_dir / "targets.csv"
     targets.to_csv(out_path, date_format="%Y-%m-%d", float_format="%.6f")
     print(f"\nExported: {out_path}  ({len(targets)} rows x {len(targets.columns)} cols)")

@@ -1,0 +1,80 @@
+{
+  "kind": "modelc",
+  "title": "Bear \u2014 Model C (1960s)",
+  "subtitle": ">20% drawdown over next 12 months (1960s member)",
+  "horizon": 12,
+  "features": [
+    "spx_vs_10ma",
+    "infl_zscore_120m",
+    "cape_z_120m",
+    "dgs10_12m_chg",
+    "ts_10y3m_inv_dummy"
+  ],
+  "signs": {
+    "spx_vs_10ma": -1,
+    "infl_zscore_120m": 1,
+    "cape_z_120m": 1,
+    "dgs10_12m_chg": -1,
+    "ts_10y3m_inv_dummy": 1
+  },
+  "labels": {
+    "spx_vs_10ma": [
+      "S&P 500 vs 10-month MA",
+      "Trend"
+    ],
+    "infl_zscore_120m": [
+      "CPI inflation, 10yr z-score",
+      "Inflation"
+    ],
+    "cape_z_120m": [
+      "Shiller CAPE, 10yr z-score",
+      "Valuation"
+    ],
+    "dgs10_12m_chg": [
+      "10y Treasury yield, 12m change",
+      "Rates"
+    ],
+    "ts_10y3m_inv_dummy": [
+      "Yield-curve inversion (10y-3m<0)",
+      "Term"
+    ]
+  },
+  "coef": [
+    -0.7713298179870688,
+    0.9326808631614504,
+    0.7700447953787044,
+    -0.6248909648597144,
+    0.3642712239912501
+  ],
+  "intercept": -2.0484096434173202,
+  "mu": {
+    "spx_vs_10ma": 0.028276200517464427,
+    "infl_zscore_120m": 0.15379109443725747,
+    "cape_z_120m": 0.4104517141009055,
+    "dgs10_12m_chg": 0.005536869340232875,
+    "ts_10y3m_inv_dummy": 0.13065976714100905
+  },
+  "sigma": {
+    "spx_vs_10ma": 0.0739771865552794,
+    "infl_zscore_120m": 1.3197999197027002,
+    "cape_z_120m": 1.432568192404306,
+    "dgs10_12m_chg": 1.13959706893826,
+    "ts_10y3m_inv_dummy": 0.33724609239807296
+  },
+  "base_rate": 0.16170763260025872,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1962-01-31",
+  "hac_pvalues": {
+    "spx_vs_10ma": 0.0006228835140360545,
+    "infl_zscore_120m": 0.0008163543532133666,
+    "cape_z_120m": 0.01342884925130794,
+    "dgs10_12m_chg": 0.008727215708796976,
+    "ts_10y3m_inv_dummy": 0.024435742295466634
+  },
+  "hac_intercept_p": 1.1499512453383431e-10,
+  "hac_maxlags": 12
+}

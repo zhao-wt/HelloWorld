@@ -1,0 +1,60 @@
+{
+  "kind": "modela",
+  "title": "Bear \u2014 Model A (1920s)",
+  "subtitle": ">20% drawdown over next 12 months (long-history member)",
+  "horizon": 12,
+  "features": [
+    "spx_vs_10ma",
+    "cape_20yr_pct",
+    "baa_10y_spread"
+  ],
+  "signs": {
+    "spx_vs_10ma": -1,
+    "cape_20yr_pct": 1,
+    "baa_10y_spread": 1
+  },
+  "labels": {
+    "spx_vs_10ma": [
+      "S&P 500 vs 10-month MA",
+      "Trend"
+    ],
+    "cape_20yr_pct": [
+      "Shiller CAPE, 20yr percentile",
+      "Valuation"
+    ],
+    "baa_10y_spread": [
+      "BAA - 10y Treasury credit spread",
+      "Credit"
+    ]
+  },
+  "coef": [
+    -0.44943251391492983,
+    0.8000044898175328,
+    0.6894898563793799
+  ],
+  "intercept": -1.5034544877919975,
+  "mu": {
+    "spx_vs_10ma": 0.025248306186374313,
+    "cape_20yr_pct": 0.5926088480814409,
+    "baa_10y_spread": 2.0444688073610027
+  },
+  "sigma": {
+    "spx_vs_10ma": 0.08951391565920708,
+    "cape_20yr_pct": 0.32399691462550506,
+    "baa_10y_spread": 0.9892078880253196
+  },
+  "base_rate": 0.21769772905246673,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1920-01-31",
+  "hac_pvalues": {
+    "spx_vs_10ma": 0.018585763536349997,
+    "cape_20yr_pct": 0.0027263392948242426,
+    "baa_10y_spread": 0.013367867217109364
+  },
+  "hac_intercept_p": 1.9027224240630858e-10,
+  "hac_maxlags": 12
+}

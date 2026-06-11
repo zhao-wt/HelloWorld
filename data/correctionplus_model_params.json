@@ -1,0 +1,90 @@
+{
+  "kind": "correctionplus",
+  "title": "Correction",
+  "subtitle": ">10% drawdown within a 6-month rolling window",
+  "horizon": 6,
+  "features": [
+    "vts_slope",
+    "spx_vs_10ma",
+    "m12_1_mom",
+    "anfci_3m_chg",
+    "cape_20yr_pct",
+    "baa_zscore_24m"
+  ],
+  "signs": {
+    "vts_slope": 1,
+    "spx_vs_10ma": -1,
+    "m12_1_mom": 1,
+    "anfci_3m_chg": 1,
+    "cape_20yr_pct": -1,
+    "baa_zscore_24m": 1
+  },
+  "labels": {
+    "vts_slope": [
+      "VIX term structure slope (VIX3M-VIX)",
+      "Volatility"
+    ],
+    "spx_vs_10ma": [
+      "S&P 500 vs 10-month MA",
+      "Trend"
+    ],
+    "m12_1_mom": [
+      "12-1 month price momentum",
+      "Trend"
+    ],
+    "anfci_3m_chg": [
+      "Adj. financial conditions, 3m change",
+      "Fin. cond."
+    ],
+    "cape_20yr_pct": [
+      "Shiller CAPE, 20yr percentile",
+      "Valuation"
+    ],
+    "baa_zscore_24m": [
+      "BAA spread, 2yr z-score",
+      "Credit"
+    ]
+  },
+  "coef": [
+    0.2095424684036726,
+    -0.4182110803163123,
+    0.28593263568061167,
+    0.07419513186161626,
+    -0.14427324566822805,
+    0.37267055823880263
+  ],
+  "intercept": -0.6528850879869734,
+  "mu": {
+    "vts_slope": 1.6974660633484164,
+    "spx_vs_10ma": 2.830873735257214,
+    "m12_1_mom": 0.08617724090338769,
+    "anfci_3m_chg": -0.00613918305597579,
+    "cape_20yr_pct": 0.6197718381430364,
+    "baa_zscore_24m": -0.06437894503171249
+  },
+  "sigma": {
+    "vts_slope": 1.8302721866575364,
+    "spx_vs_10ma": 7.352463502742757,
+    "m12_1_mom": 0.15637090012215266,
+    "anfci_3m_chg": 0.6496051378677512,
+    "cape_20yr_pct": 0.33943210085420866,
+    "baa_zscore_24m": 1.2631152882642294
+  },
+  "base_rate": 0.34880803011292344,
+  "min_w": 0.0,
+  "max_w": 0.3,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": false,
+  "train_start": "1960-01-31",
+  "hac_pvalues": {
+    "vts_slope": 0.36038683637690583,
+    "spx_vs_10ma": 0.05125975531309246,
+    "m12_1_mom": 0.1384572014765384,
+    "anfci_3m_chg": 0.5407636426899947,
+    "cape_20yr_pct": 0.35991957513097494,
+    "baa_zscore_24m": 0.057274391402893254
+  },
+  "hac_intercept_p": 2.002345573459685e-05,
+  "hac_maxlags": 6
+}

@@ -1,0 +1,96 @@
+{
+  "members": [
+    "modela",
+    "modelb",
+    "modelc",
+    "modeld"
+  ],
+  "method": "equal_weight",
+  "calibration": "platt",
+  "platt_a": 0.11224561496723481,
+  "platt_b": 1.3292156796644763,
+  "current_member_probs": {
+    "modela": 0.23768654410674564,
+    "modelb": 0.12811636610471733,
+    "modelc": 0.10444338146059652,
+    "modeld": 0.09727910204757552
+  },
+  "current_ensemble_prob": 0.14188134842990874,
+  "current_ensemble_prob_calibrated": 0.09279194639782204,
+  "as_of": "2026-06-30",
+  "common_oos_start": "2005-01-31",
+  "members_meta": {
+    "modela": {
+      "title": "Bear \u2014 Model A (1920s)",
+      "subtitle": ">20% drawdown over next 12 months (long-history member)",
+      "train_start": "1920-01-31",
+      "oos_start": "1950-01-31",
+      "n_factors": 3,
+      "categories": [
+        "Trend",
+        "Valuation",
+        "Credit"
+      ],
+      "current_prob": 0.23768654410674564,
+      "base_rate": 0.21769772905246673,
+      "oos_auc_native": 0.6416447069513858,
+      "oos_auc_common": 0.7684056007226739
+    },
+    "modelb": {
+      "title": "Bear \u2014 Model B (1950s)",
+      "subtitle": ">20% drawdown over next 12 months (post-war member)",
+      "train_start": "1950-01-31",
+      "oos_start": "1970-01-31",
+      "n_factors": 4,
+      "categories": [
+        "Trend",
+        "Inflation",
+        "Valuation",
+        "Rates"
+      ],
+      "current_prob": 0.12811636610471733,
+      "base_rate": 0.15485278080697928,
+      "oos_auc_native": 0.7492784266344477,
+      "oos_auc_common": 0.8716124661246614
+    },
+    "modelc": {
+      "title": "Bear \u2014 Model C (1960s)",
+      "subtitle": ">20% drawdown over next 12 months (1960s member)",
+      "train_start": "1962-01-31",
+      "oos_start": "1985-01-31",
+      "n_factors": 5,
+      "categories": [
+        "Trend",
+        "Inflation",
+        "Valuation",
+        "Rates",
+        "Term"
+      ],
+      "current_prob": 0.10444338146059652,
+      "base_rate": 0.16170763260025872,
+      "oos_auc_native": 0.7887286324786325,
+      "oos_auc_common": 0.8396567299006323
+    },
+    "modeld": {
+      "title": "Bear \u2014 Model D (1980s)",
+      "subtitle": ">20% drawdown over next 12 months (modern member)",
+      "train_start": "1986-01-31",
+      "oos_start": "2005-01-31",
+      "n_factors": 3,
+      "categories": [
+        "Policy",
+        "Inflation",
+        "Credit"
+      ],
+      "current_prob": 0.09727910204757552,
+      "base_rate": 0.1670103092783505,
+      "oos_auc_native": 0.8985998193315267,
+      "oos_auc_common": 0.8985998193315267
+    }
+  },
+  "metrics": {
+    "ensemble_auc_full": 0.7421263062244435,
+    "ensemble_auc_common": 0.8817750677506775,
+    "realized_base_rate": 0.15485278080697928
+  }
+}

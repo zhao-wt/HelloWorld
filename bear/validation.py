@@ -54,6 +54,7 @@ from sklearn.metrics import (
 )
 
 _BEAR_DIR = Path(__file__).resolve().parent
+_DATA_DIR = _BEAR_DIR.parent / "data"
 
 # Bear Model 1 features (from Phase 4 exhaustive search winner)
 BEAR_FEATURES  = ["ntfs_3m_chg", "ts_inv_dummy", "ebp_3m_chg",
@@ -360,15 +361,15 @@ if __name__ == "__main__":
     print(f"{'='*70}")
 
     # -- Load OOS probability series --
-    bear_out = pd.read_csv(_BEAR_DIR / "bear_model_output.csv",
+    bear_out = pd.read_csv(_DATA_DIR / "bear_model_output.csv",
                            index_col=0, parse_dates=True)
-    corr_out = pd.read_csv(_BEAR_DIR / "correction_model_output.csv",
+    corr_out = pd.read_csv(_DATA_DIR / "correction_model_output.csv",
                            index_col=0, parse_dates=True)
-    bear_f   = pd.read_csv(_BEAR_DIR / "bear_features.csv",
+    bear_f   = pd.read_csv(_DATA_DIR / "bear_features.csv",
                            index_col=0, parse_dates=True)
-    corr_f   = pd.read_csv(_BEAR_DIR / "correction_features.csv",
+    corr_f   = pd.read_csv(_DATA_DIR / "correction_features.csv",
                            index_col=0, parse_dates=True)
-    targets  = pd.read_csv(_BEAR_DIR / "targets.csv",
+    targets  = pd.read_csv(_DATA_DIR / "targets.csv",
                            index_col=0, parse_dates=True)
 
     y_bear   = targets["y_bear"]

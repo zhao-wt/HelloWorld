@@ -1,0 +1,70 @@
+{
+  "kind": "bearplus",
+  "title": "Bear",
+  "subtitle": ">20% drawdown over next 12 months",
+  "horizon": 12,
+  "features": [
+    "infl_zscore_120m",
+    "infl_yoy",
+    "spx_vs_10ma",
+    "cape_z_120m"
+  ],
+  "signs": {
+    "infl_zscore_120m": 1,
+    "infl_yoy": 1,
+    "spx_vs_10ma": -1,
+    "cape_z_120m": 1
+  },
+  "labels": {
+    "infl_zscore_120m": [
+      "CPI inflation, 10yr z-score",
+      "Inflation"
+    ],
+    "infl_yoy": [
+      "CPI inflation, YoY %",
+      "Inflation"
+    ],
+    "spx_vs_10ma": [
+      "S&P 500 vs 10-month MA",
+      "Trend"
+    ],
+    "cape_z_120m": [
+      "Shiller CAPE, 10yr z-score",
+      "Valuation"
+    ]
+  },
+  "coef": [
+    1.1392367198797015,
+    -1.1947352611648874,
+    -0.4800887474870032,
+    0.3775086236242086
+  ],
+  "intercept": -1.625481501192368,
+  "mu": {
+    "infl_zscore_120m": 0.09414071224051544,
+    "infl_yoy": 3.2150274108804586,
+    "spx_vs_10ma": 0.022854304939155332,
+    "cape_z_120m": 0.22524862419470293
+  },
+  "sigma": {
+    "infl_zscore_120m": 1.2264949662800657,
+    "infl_yoy": 4.984342503871965,
+    "spx_vs_10ma": 0.08779205271118577,
+    "cape_z_120m": 1.4078639755499145
+  },
+  "base_rate": 0.20758768790264853,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1910-01-31",
+  "hac_pvalues": {
+    "infl_zscore_120m": 0.00013817135235694167,
+    "infl_yoy": 0.002155132982351704,
+    "spx_vs_10ma": 0.016234067240300076,
+    "cape_z_120m": 0.11419738536571233
+  },
+  "hac_intercept_p": 2.76445533131664e-13,
+  "hac_maxlags": 12
+}
