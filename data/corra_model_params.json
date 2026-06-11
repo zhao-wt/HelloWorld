@@ -1,0 +1,50 @@
+{
+  "kind": "corra",
+  "title": "Correction \u2014 Model A (1920s)",
+  "subtitle": ">10% drawdown within a 6-month rolling window",
+  "horizon": 6,
+  "features": [
+    "infl_zscore_120m",
+    "baa_yield_chg6"
+  ],
+  "signs": {
+    "infl_zscore_120m": 1,
+    "baa_yield_chg6": 1
+  },
+  "labels": {
+    "infl_zscore_120m": [
+      "CPI inflation, 10yr z-score",
+      "Inflation"
+    ],
+    "baa_yield_chg6": [
+      "BAA corporate yield, 6m change",
+      "Credit"
+    ]
+  },
+  "coef": [
+    0.28095655876897413,
+    0.26393765727144386
+  ],
+  "intercept": -0.4887874362840027,
+  "mu": {
+    "infl_zscore_120m": 0.055649851996867686,
+    "baa_yield_chg6": -0.006155050900548158
+  },
+  "sigma": {
+    "infl_zscore_120m": 1.2218339146993082,
+    "baa_yield_chg6": 0.6445437873478543
+  },
+  "base_rate": 0.38449490994518404,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1920-01-31",
+  "hac_pvalues": {
+    "infl_zscore_120m": 0.028033260957863293,
+    "baa_yield_chg6": 0.047612679708279426
+  },
+  "hac_intercept_p": 6.611891013164062e-05,
+  "hac_maxlags": 6
+}

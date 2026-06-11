@@ -2189,13 +2189,33 @@ def _load_assessment_cached(kind: str) -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _load_ensemble_cached() -> tuple[dict, pd.DataFrame]:
-    """Load the precomputed ensemble summary + OOS series (no ML libs needed)."""
+def _load_ensemble_cached(params_file: str, oos_file: str,
+                          mtime: float = 0.0) -> tuple[dict, pd.DataFrame]:
+    """Load a precomputed ensemble summary + OOS series (no ML libs needed).
+
+    Keyed on the params-file mtime so regenerated data busts the cache.
+    """
     import json
-    with open(DATA_DIR / "ensemble_params.json") as fh:
+    with open(DATA_DIR / params_file) as fh:
         params = json.load(fh)
-    oos = pd.read_csv(DATA_DIR / "ensemble_oos.csv", index_col=0, parse_dates=True)
+    oos = pd.read_csv(DATA_DIR / oos_file, index_col=0, parse_dates=True)
     return params, oos
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_univariate_cached(csv_file: str, mtime: float = 0.0) -> pd.DataFrame:
+    """Load a precomputed univariate leaderboard (no ML at runtime).
+
+    Keyed on the CSV mtime so regenerating the file refreshes the table.
+    """
+    return pd.read_csv(DATA_DIR / csv_file)
+
+
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _risk_level(value: float, base: float) -> tuple[str, str]:
@@ -2355,6 +2375,7 @@ def render_probability_history_chart(
 def render_member_breakdown_table(params: dict) -> None:
     """Compact table of the four era-trained members and their OOS skill."""
     meta = params["members_meta"]
+    realized_base = params["metrics"]["realized_base_rate"]
     rows_html = []
     for k in params["members"]:
         m = meta[k]
@@ -2362,24 +2383,41 @@ def render_member_breakdown_table(params: dict) -> None:
         letter = k[-1].upper()
         era = m["title"].split("(")[-1].rstrip(")") if "(" in m["title"] else ""
         cats = ", ".join(m["categories"])
-        cur = m["current_prob"]; aucc = m["oos_auc_common"]; aucn = m["oos_auc_native"]
-        cur_color = "#ef4444" if cur >= m["base_rate"] else "#22c55e"
+        cur = m["current_prob"]
+        cal = m.get("current_prob_calibrated", cur)
+        aucc = m["oos_auc_common"]; aucn = m["oos_auc_native"]
+        raw_color = "#ef4444" if cur >= m["base_rate"] else "#22c55e"
+        cal_color = "#ef4444" if cal >= realized_base else "#22c55e"
         rows_html.append(
             "<tr>"
             f'<td style="font-weight:600;">Model {letter} <span style="color:#5d675f;">· {escape(era)}</span></td>'
             f'<td>train {escape(str(m["train_start"])[:4])}+</td>'
             f'<td style="text-align:center;">{m["n_factors"]}</td>'
             f'<td style="font-size:0.86rem;">{escape(cats)}</td>'
-            f'<td style="text-align:right;color:{cur_color};font-weight:600;">{cur:.1%}</td>'
+            f'<td style="text-align:right;color:#8a948c;">{cur:.1%}</td>'
+            f'<td style="text-align:right;color:{cal_color};font-weight:600;">{cal:.1%}</td>'
             f'<td style="text-align:right;">{aucn:.3f}</td>'
             f'<td style="text-align:right;">{aucc:.3f}</td>'
             "</tr>"
         )
+    # Footer: the ensemble = equal-weight average, then Platt-calibrated.
+    ens_raw = params["current_ensemble_prob"]
+    ens_cal = params["current_ensemble_prob_calibrated"]
+    ens_color = "#ef4444" if ens_cal >= realized_base else "#22c55e"
+    rows_html.append(
+        '<tr style="background:#eef2f0;font-weight:700;">'
+        '<td colspan="4">Ensemble (equal-weight average → Platt-calibrated)</td>'
+        f'<td style="text-align:right;color:#8a948c;">{ens_raw:.1%}</td>'
+        f'<td style="text-align:right;color:{ens_color};">{ens_cal:.1%}</td>'
+        '<td colspan="2"></td>'
+        "</tr>"
+    )
     table_html = f"""
     <table style="width:100%;border-collapse:collapse;font-size:0.92rem;">
       <thead><tr style="background:#f3f4f6;text-align:left;">
         <th>Member</th><th>Trained</th><th>#</th><th>Factor categories</th>
-        <th style="text-align:right;">Current P</th>
+        <th style="text-align:right;">Current P<br>(raw)</th>
+        <th style="text-align:right;">Current P<br>(calibrated)</th>
         <th style="text-align:right;">OOS AUC<br>(native)</th>
         <th style="text-align:right;">OOS AUC<br>(2005+)</th>
       </tr></thead>
@@ -2388,19 +2426,113 @@ def render_member_breakdown_table(params: dict) -> None:
     <style>table td, table th {{ border:1px solid #e5e7eb; padding:0.45rem 0.7rem; }}</style>
     """
     st.markdown(table_html, unsafe_allow_html=True)
+    st.caption(
+        "Raw = each member's own logistic output. Calibrated = the same Platt map "
+        "applied to every member and to the ensemble, so all sit on one comparable, "
+        "history-matched scale. Color: red if calibrated probability ≥ the "
+        f"{realized_base:.1%} realized base rate, green if below."
+    )
 
 
-def render_ensemble_bear_page(title: str, caption: str) -> None:
-    """Primary Bear page: calibrated ENSEMBLE probability + per-member breakdown."""
+def render_univariate_table(df: pd.DataFrame, base_rate: float | None = None) -> None:
+    """Leaderboard of single-factor bear models, grouped by category.
+
+    Rows whose current probability exceeds ``base_rate`` are tinted light red.
+    """
+    headers = ["Factor", "Data since", "Raw value", "Z-score",
+               "p (HAC)", "AUC", "Probability", "Direction", "Basis for direction"]
+    ncol = len(headers)
+    header_html = "".join(f"<th>{h}</th>" for h in headers)
+    rows_html: list[str] = []
+    current_cat = None
+    for _, r in df.iterrows():
+        if r["Category"] != current_cat:
+            current_cat = r["Category"]
+            rows_html.append(
+                f'<tr><td colspan="{ncol}" style="background:#eef2f0;'
+                f'font-weight:700;color:#243b2f;">{escape(str(current_cat))}</td></tr>'
+            )
+        dir_color = "#ef4444" if r["Direction"] == "Bearish" else "#22c55e"
+        # Light-red tint when the factor's probability is above the base rate.
+        hot = base_rate is not None and r["Probability"] > base_rate
+        bg = "background:#fdecea;" if hot else ""
+        pv = r["P (HAC)"]
+        if pd.isna(pv):
+            pcell, weight = "—", "400"
+        else:
+            star = " *" if pv < 0.05 else (" ." if pv < 0.10 else "")
+            pcell = f"{pv:.3f}{star}"
+            weight = "600" if pv < 0.05 else "400"
+        cells = [
+            f'<td style="{bg}">{escape(str(r["Factor"]))}</td>',
+            f'<td style="{bg}text-align:center;color:#5d675f;">{escape(str(r["Start"]))}</td>',
+            f'<td style="{bg}text-align:right;">{r["Raw value"]:+.3f}</td>',
+            f'<td style="{bg}text-align:right;">{r["Z-score"]:+.2f}</td>',
+            f'<td style="{bg}text-align:right;font-weight:{weight};">{pcell}</td>',
+            f'<td style="{bg}text-align:right;">{r["AUC"]:.3f}</td>',
+            f'<td style="{bg}text-align:right;font-weight:600;">{r["Probability"]:.1%}</td>',
+            f'<td style="background:{dir_color};color:white;font-weight:600;'
+            f'text-align:center;">{escape(str(r["Direction"]))}</td>',
+            f'<td style="{bg}font-size:0.74rem;color:#5d675f;">'
+            f'{escape(str(r.get("Basis", "")))}</td>',
+        ]
+        rows_html.append("<tr>" + "".join(cells) + "</tr>")
+    table_html = f"""
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+      <thead><tr style="background:#f3f4f6;text-align:left;">{header_html}</tr></thead>
+      <tbody>{"".join(rows_html)}</tbody>
+    </table>
+    <style>table td, table th {{ border:1px solid #e5e7eb; padding:0.4rem 0.65rem; }}</style>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+ENSEMBLE_UI = {
+    "bear": {
+        "noun": "Bear",
+        "params_file": "ensemble_params.json",
+        "oos_file": "ensemble_oos.csv",
+        "univariate_file": "univariate_bear.csv",
+        "band_mode": "rolling12",
+        "event": ">20% drawdown over the next 12 months",
+        "uni_event": ">20% / 12-month bear",
+        "band_note": "12-month rolling drawdown (correction 10–20%, bear >20%)",
+        "hac_lag": 12,
+        "build_cmd": "python -m bear.ensemble bear",
+        "uni_cmd": "python -m bear.univariate bear",
+    },
+    "correction": {
+        "noun": "Correction",
+        "params_file": "correction_ensemble_params.json",
+        "oos_file": "correction_ensemble_oos.csv",
+        "univariate_file": "univariate_correction.csv",
+        "band_mode": "rolling6",
+        "event": ">10% drawdown within a 6-month rolling window",
+        "uni_event": ">10% / 6-month correction",
+        "band_note": "6-month rolling correction (index >10% below its trailing 6-month high)",
+        "hac_lag": 6,
+        "build_cmd": "python -m bear.ensemble correction",
+        "uni_cmd": "python -m bear.univariate correction",
+    },
+}
+
+
+def render_ensemble_page(family: str, title: str, caption: str) -> None:
+    """Primary ensemble page (bear or correction): calibrated probability +
+    per-member breakdown + walk-forward history + univariate leaderboard."""
+    ui = ENSEMBLE_UI[family]
+    noun = ui["noun"]
     render_section_header(title, caption)
 
     try:
-        params, oos = _load_ensemble_cached()
+        params, oos = _load_ensemble_cached(
+            ui["params_file"], ui["oos_file"],
+            _mtime(DATA_DIR / ui["params_file"]))
         members = {k: _load_assessment_cached(k) for k in params["members"]}
     except Exception as exc:
         st.error(
-            f"Could not load the ensemble assessment: {exc}\n\n"
-            "Run `python -m bear.ensemble` to generate the ensemble artifacts."
+            f"Could not load the {noun.lower()} ensemble assessment: {exc}\n\n"
+            f"Run `{ui['build_cmd']}` to generate the ensemble artifacts."
         )
         return
 
@@ -2412,12 +2544,12 @@ def render_ensemble_bear_page(title: str, caption: str) -> None:
 
     # -- Top metric row (calibrated probability is the headline) --
     m = st.columns(4)
-    m[0].metric("Bear probability (ensemble)", f"{prob:.1%}",
+    m[0].metric(f"{noun} probability (ensemble)", f"{prob:.1%}",
                 help="Equal-weight average of the four era-trained members, "
                      "Platt-recalibrated to the realized base rate.")
     m[1].metric("As of", as_of.strftime("%Y-%m-%d"))
     m[2].metric("Historical base rate", f"{base:.1%}",
-                help="Realized frequency of a >20% 12-month drawdown over the OOS span.")
+                help=f"Realized frequency of a {ui['event']} over the OOS span.")
     m[3].markdown(
         f"""
         <div style="border:1px solid #dce3dd;border-radius:8px;
@@ -2449,15 +2581,14 @@ def render_ensemble_bear_page(title: str, caption: str) -> None:
 
     # -- Ensemble probability history (walk-forward OOS, full coverage) --
     render_section_header(
-        "Bear Probability History — Out-of-Sample, Walk-Forward (Last 50 Years)",
+        f"{noun} Probability History — Out-of-Sample, Walk-Forward (Last 50 Years)",
         "Equal-weight ensemble of the members' honest expanding-window predictions "
         "(each member re-fit on prior data only). Growing membership: Model A from "
-        "1950, B from 1970, C from 1985, D from 2005. Shaded bands mark the 12-month "
-        "rolling drawdown (correction 10–20%, bear >20%).",
+        f"1950, B from 1970, C from 1985, D from 2005. Shaded bands mark the {ui['band_note']}.",
     )
     render_probability_history_chart(
         oos["ensemble"].dropna(), base, color, years=50,
-        value_kind="probability", band_mode="rolling12")
+        value_kind="probability", band_mode=ui["band_mode"])
 
     # -- Per-member factor detail (expanders) --
     render_section_header(
@@ -2474,16 +2605,54 @@ def render_ensemble_bear_page(title: str, caption: str) -> None:
             render_factor_table(a["factors"])
             render_model_formula(a)
 
-    # -- Legacy single-model view (continuity) --
-    with st.expander("Legacy single-model view (bearplus)"):
+    # -- Univariate factor leaderboard --
+    render_section_header(
+        "Univariate Factor Models",
+        f"Each row is a single-factor logistic model of the {ui['uni_event']} "
+        "event, fit on all available history. Columns show the latest raw value, "
+        "data-history start, standardized z-score, Newey-West HAC p-value, in-sample "
+        f"AUC, the model's current {noun.lower()} probability, and the direction of its "
+        "current push. Grouped by category (strongest category first; AUC-ranked within).",
+    )
+    try:
+        uni = _load_univariate_cached(
+            ui["univariate_file"], _mtime(DATA_DIR / ui["univariate_file"]))
+        render_univariate_table(uni, base_rate=base)
         st.caption(
-            "The previous single unconstrained-logistic Bear model, retained for "
-            "reference. The ensemble above supersedes it as the headline probability."
+            f"`*` p<0.05  `.` p<0.10 (HAC, max lag {ui['hac_lag']}). Factors include "
+            f"combinations (e.g. VIX/VIX3M ratio, 10y−3m spread, price vs 10-month MA). "
+            f"Rows tinted light red have a current probability above the {base:.1%} "
+            f"historical base rate. A single factor's probability is naturally "
+            f"noisier than the ensemble's."
         )
-        bp = _load_assessment_cached("bearplus")
-        b_level, b_color = _risk_level(bp["current_prob"], bp["base_rate"])
-        st.metric("Bear probability (bearplus)", f"{bp['current_prob']:.1%}")
-        render_factor_table(bp["factors"])
+        st.markdown(
+            f"""
+<div style="font-size:0.8rem;color:#5d675f;border-top:1px solid #e5e7eb;
+            margin-top:0.6rem;padding-top:0.5rem;">
+<b>How the Direction is determined.</b> The method is the same for every factor.
+Each factor is fit as a single-variable <i>unconstrained</i> logistic regression
+on the {noun.lower()} event ({ui['event']}), so the model <i>learns from history</i>
+the factor's relationship to {noun.lower()} risk. The small-font
+<b>Basis for direction</b> column states the call when the factor sits <i>above</i>
+its historical average: <i>Bearish above avg</i> (positive coefficient) or
+<i>Bullish above avg</i> (negative coefficient); the opposite call applies when it
+is below average. <b>Direction</b> combines that rule with the <b>Z-score</b>
+(where the latest reading sits): it is the sign of (learned coefficient) ×
+(z-score) — <b style="color:#ef4444;">Bearish</b> when the current reading pushes
+the modeled probability above what the factor's mean implies,
+<b style="color:#22c55e;">Bullish</b> otherwise. So a <i>"Bearish above avg"</i>
+factor reads <b style="color:#22c55e;">Bullish</b> today whenever its z-score is
+negative (currently below average), and vice-versa. The <b>Probability</b> is that
+one-factor model's fitted {noun.lower()} probability at the latest reading;
+<b>z-score</b> standardizes the raw value over the factor's full history
+(<b>Data since</b>).
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    except Exception as exc:
+        st.info(f"Univariate leaderboard unavailable — run "
+                f"`{ui['uni_cmd']}` to generate it. ({exc})")
 
 
 def render_calibrated_model_page(kind: str, title: str, caption: str) -> None:
@@ -3538,18 +3707,20 @@ with performance_tab:
         render_panel("Attribution", "Cycle-stage and asset-class contribution analysis.")
 
 with correction_tab:
-    render_calibrated_model_page(
-        kind="correctionplus",
-        title="Correction Model",
+    render_ensemble_page(
+        family="correction",
+        title="Correction Model — Ensemble",
         caption=(
-            "Weight-constrained logistic model for the probability of a >10% S&P 500 "
-            "drawdown within a rolling 6-month window. Fast positioning / volatility / "
-            "financial-conditions signals; Newey-West HAC inference."
+            "Probability of a >10% S&P 500 drawdown within a rolling 6-month window, "
+            "from an equal-weight ensemble of four era-trained logistic models "
+            "(1920s / 1950s / 1960s / 1980s), Platt-recalibrated. Every factor is "
+            "Newey-West HAC-significant; predictions are walk-forward out-of-sample."
         ),
     )
 
 with bear_tab:
-    render_ensemble_bear_page(
+    render_ensemble_page(
+        family="bear",
         title="Bear Model — Ensemble",
         caption=(
             "Probability of a >20% S&P 500 drawdown within a rolling 12-month window, "

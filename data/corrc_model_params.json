@@ -1,0 +1,50 @@
+{
+  "kind": "corrc",
+  "title": "Correction \u2014 Model C (1960s)",
+  "subtitle": ">10% drawdown within a 6-month rolling window",
+  "horizon": 6,
+  "features": [
+    "baa_yield_chg6",
+    "ts_10y3m_inv_dummy"
+  ],
+  "signs": {
+    "baa_yield_chg6": 1,
+    "ts_10y3m_inv_dummy": 1
+  },
+  "labels": {
+    "baa_yield_chg6": [
+      "BAA corporate yield, 6m change",
+      "Credit"
+    ],
+    "ts_10y3m_inv_dummy": [
+      "Yield-curve inversion (10y-3m<0)",
+      "Yield curve"
+    ]
+  },
+  "coef": [
+    0.3906222839440816,
+    0.28764846278766387
+  ],
+  "intercept": -0.645042965313204,
+  "mu": {
+    "baa_yield_chg6": 0.006377749029754206,
+    "ts_10y3m_inv_dummy": 0.13065976714100905
+  },
+  "sigma": {
+    "baa_yield_chg6": 0.7014214451022515,
+    "ts_10y3m_inv_dummy": 0.33724609239807296
+  },
+  "base_rate": 0.35058214747736094,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1962-01-31",
+  "hac_pvalues": {
+    "baa_yield_chg6": 0.011138913145561036,
+    "ts_10y3m_inv_dummy": 0.027727781455746392
+  },
+  "hac_intercept_p": 4.463874817406399e-05,
+  "hac_maxlags": 6
+}

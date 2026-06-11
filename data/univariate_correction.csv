@@ -1,0 +1,52 @@
+Factor,Category,Start,Raw value,Z-score,P (HAC),AUC,Probability,Direction,Basis,n,feature
+"VIX, level",Volatility,1990-02,17.24,-0.3,0.0375,0.67,0.3038,Bullish,Bearish above avg,436,vix_level
+"VIX, 2yr z-score",Volatility,1991-01,-0.2941,-0.24,0.0258,0.635,0.3054,Bullish,Bearish above avg,425,vix_zscore_24m
+VIX>VIX3M backwardation (dummy),Volatility,2008-01,0.0,-0.32,0.3787,0.526,0.34,Bullish,Bearish above avg,221,vts_backwardation
+VIX term structure slope (VIX3M-VIX),Volatility,2008-01,3.22,0.83,0.4258,0.522,0.3236,Bullish,Bullish above avg,221,vts_slope
+VIX / VIX3M ratio,Volatility,2008-01,0.8426,-0.92,0.6774,0.512,0.3338,Bullish,Bearish above avg,221,vts_ratio
+"VIX term structure slope, 2yr z-score",Volatility,2008-12,1.1247,1.1,0.6218,0.506,0.3393,Bearish,Bearish above avg,210,vts_slope_zscore
+"NFCI financial conditions, level",Fin. conditions,1971-02,-0.501,-0.5,0.0086,0.658,0.3084,Bullish,Bearish above avg,664,nfci_level
+"ANFCI adj. financial conditions, level",Fin. conditions,1971-02,-0.452,-0.45,0.0305,0.628,0.3216,Bullish,Bearish above avg,664,anfci_level
+"NFCI, 3m change",Fin. conditions,1971-05,0.032,0.07,0.0708,0.568,0.3591,Bearish,Bearish above avg,661,nfci_3m_chg
+"ANFCI, 3m change",Fin. conditions,1971-05,0.05,0.09,0.1429,0.535,0.3596,Bearish,Bearish above avg,661,anfci_3m_chg
+"BAA-10y spread, 5yr z-score",Credit,1989-01,-1.0042,-0.69,0.0097,0.638,0.2552,Bullish,Bearish above avg,449,baa_zscore_60m
+"BAA-10y spread, 2yr z-score",Credit,1987-01,-0.7033,-0.51,0.0198,0.622,0.2828,Bullish,Bearish above avg,473,baa_zscore_24m
+"BAA corporate yield, 6m change",Credit,1919-08,0.24,0.38,0.0058,0.607,0.4144,Bearish,Bearish above avg,1282,baa_yield_chg6
+"BAA-AAA quality spread, 5yr z-score",Credit,1922-01,-1.2892,-0.88,0.0015,0.6,0.3122,Bullish,Bearish above avg,1253,baa_aaa_z60
+"BAA-10y spread, 3m change",Credit,1986-05,-0.23,-0.59,0.0204,0.598,0.2782,Bullish,Bearish above avg,481,baa_3m_chg
+"Excess bond premium, level",Credit,1973-03,-0.2191,-0.53,0.0774,0.577,0.3141,Bullish,Bearish above avg,639,ebp_level
+"BAA-10y credit spread, 5yr z-score",Credit,1922-01,-0.6087,-0.41,0.0356,0.568,0.3641,Bullish,Bearish above avg,1253,baa_10y_z60
+"BAA-AAA quality spread, 6m change",Credit,1919-08,-0.06,-0.15,0.1589,0.556,0.3796,Bullish,Bearish above avg,1282,baa_aaa_chg6
+"BAA-AAA quality spread, level",Credit,1919-02,0.54,-0.91,0.0047,0.555,0.3144,Bullish,Bearish above avg,1288,baa_aaa_spread
+"Excess bond premium, 3m change",Credit,1973-06,0.0515,0.14,0.0098,0.554,0.3609,Bearish,Bearish above avg,636,ebp_3m_chg
+"BAA-AAA quality spread, 2yr z-score",Credit,1920-01,-1.452,-0.99,0.0748,0.548,0.3389,Bullish,Bearish above avg,1277,baa_aaa_z24
+"BAA-10y default spread, level",Credit,1986-02,1.57,-1.02,0.361,0.547,0.2928,Bullish,Bearish above avg,484,baa_level
+"BAA-10y credit spread, level",Credit,1919-02,1.65,-0.4,0.0704,0.538,0.3628,Bullish,Bearish above avg,1288,baa_10y_spread
+"BAA-10y credit spread, 2yr z-score",Credit,1920-01,-0.1437,-0.03,0.378,0.526,0.3836,Bullish,Bearish above avg,1277,baa_10y_z24
+10y-2y term spread,Yield curve,1976-07,0.47,-0.41,0.0501,0.615,0.3685,Bearish,Bullish above avg,599,ts_10y2y
+"10y-3m term spread (native, 1982+)",Yield curve,1982-02,0.76,-0.61,0.1188,0.589,0.3485,Bearish,Bullish above avg,532,ts_10y3m
+"Near-term forward spread, level",Yield curve,1961-07,0.5449,-0.28,0.048,0.566,0.3678,Bearish,Bullish above avg,779,ntfs_level
+"Near-term forward spread, 3m change",Yield curve,1961-10,0.9063,1.34,0.0595,0.561,0.4273,Bearish,Bearish above avg,776,ntfs_3m_chg
+Yield-curve inversion 10y-3m<0 (long),Yield curve,1920-02,0.0,-0.36,0.092,0.528,0.3698,Bullish,Bearish above avg,1276,ts_10y3m_inv_dummy
+Yield-curve inversion 10y-3m<0 (native),Yield curve,1982-02,0.0,-0.36,0.319,0.523,0.3008,Bullish,Bearish above avg,532,ts_inv_dummy
+10y-3m term spread (long history),Yield curve,1920-02,0.85,-0.45,0.7683,0.501,0.3885,Bearish,Bullish above avg,1276,ts_10y3m_level
+"CPI inflation, 10yr z-score",Inflation,1877-01,0.1465,0.04,0.0027,0.598,0.3069,Bearish,Bearish above avg,1793,infl_zscore_120m
+"CPI inflation, YoY %",Inflation,1872-02,3.5211,0.21,0.0547,0.563,0.3119,Bearish,Bearish above avg,1852,infl_yoy
+"Leading indicator, 6m growth",Leading,1955-09,0.0158,0.6,0.0699,0.572,0.3126,Bullish,Bullish above avg,849,lei_6m_growth
+LEI stress <-4% (dummy),Leading,1955-09,0.0,-0.19,0.8999,0.501,0.348,Bearish,Bullish above avg,849,lei_stress_dummy
+S&P 500 vs 10-month MA,Trend,1871-07,0.1014,0.98,0.0099,0.564,0.2494,Bullish,Bullish above avg,1859,spx_vs_10ma
+S&P 500 below 10-month MA (dummy),Trend,1871-07,0.0,-0.75,0.0064,0.559,0.2644,Bullish,Bearish above avg,1859,spx_below_10ma
+S&P 500 12-month momentum,Trend,1872-02,0.2822,1.16,0.4507,0.527,0.2831,Bullish,Bullish above avg,1852,spx_12m_mom
+12-1 month price momentum,Trend,1872-02,0.2822,1.16,0.4507,0.527,0.2831,Bullish,Bullish above avg,1852,m12_1_mom
+"10y Treasury yield, 12m change",Rates,1872-02,0.04,0.06,0.0125,0.557,0.3053,Bearish,Bearish above avg,1852,dgs10_12m_chg
+"Fed funds rate, 6m change",Policy,1955-02,-0.25,-0.19,0.4662,0.547,0.3461,Bullish,Bearish above avg,856,ffr_6m_chg
+"Shiller CAPE, 20yr percentile",Valuation,1910-01,0.9958,1.31,0.2298,0.533,0.4078,Bearish,Bearish above avg,1397,cape_20yr_pct
+"Shiller CAPE, 10yr z-score",Valuation,1905-01,1.9504,1.26,0.9124,0.507,0.3541,Bullish,Bullish above avg,1457,cape_z_120m
+Sahm rule (real-time),Labor,1960-01,0.1,-0.33,0.2845,0.53,0.36,Bearish,Bullish above avg,796,sahm_level
+Unemployment Sahm gap (3m avg - 12m min),Labor,1949-01,0.3333,-0.21,0.0955,0.506,0.3481,Bearish,Bullish above avg,922,unrate_sahm
+"Unemployment rate, 12m change",Labor,1949-02,0.0,-0.01,0.3298,0.505,0.3362,Bearish,Bullish above avg,927,unrate_12m_chg
+Sahm trigger >=0.5 (dummy),Labor,1960-01,0.0,-0.53,0.9859,0.501,0.3489,Bullish,Bearish above avg,796,sahm_trigger
+"Initial jobless claims, YoY %",Labor,1968-02,-8.7144,-0.18,0.1889,0.456,0.373,Bearish,Bullish above avg,700,icsa_yoy_pct
+"Put/call complacency (low CPCE, dummy)",Sentiment,2004-10,1.0,2.16,0.5226,0.522,0.2647,Bullish,Bullish above avg,194,cpce_low_dummy
+"Industrial production, 6m ann. growth",Real economy,1919-08,2.5387,-0.09,0.8029,0.515,0.3868,Bearish,Bullish above avg,1282,indpro_6m_growth
+"Industrial production, YoY %",Real economy,1920-02,1.3531,-0.2,0.6603,0.509,0.3874,Bearish,Bullish above avg,1276,indpro_yoy

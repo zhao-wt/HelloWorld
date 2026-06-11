@@ -477,9 +477,18 @@ if __name__ == "__main__":
     bear_f.to_csv(bear_out, date_format="%Y-%m-%d", float_format="%.6f")
     corr_f.to_csv(corr_out, date_format="%Y-%m-%d", float_format="%.6f")
 
+    # Combined panel (union of all engineered features) — used by the ensemble
+    # members and univariate leaderboards, which may mix bear- and correction-
+    # only factors in a single model.
+    all_out = _data_dir / "all_features.csv"
+    extra = [c for c in corr_f.columns if c not in bear_f.columns]
+    all_f = bear_f.join(corr_f[extra], how="outer").sort_index()
+    all_f.to_csv(all_out, date_format="%Y-%m-%d", float_format="%.6f")
+
     print(f"\nExported:")
     print(f"  {bear_out}  ({len(bear_f)} rows x {len(bear_f.columns)} features)")
     print(f"  {corr_out}  ({len(corr_f)} rows x {len(corr_f.columns)} features)")
+    print(f"  {all_out}  ({len(all_f)} rows x {len(all_f.columns)} features)")
 
     # Quick sanity check: known signal values at key bear market episodes
     print(f"\n{'='*70}")

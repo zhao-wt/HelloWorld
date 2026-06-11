@@ -1,0 +1,90 @@
+{
+  "kind": "corrd",
+  "title": "Correction \u2014 Model D (1980s)",
+  "subtitle": ">10% drawdown within a 6-month rolling window",
+  "horizon": 6,
+  "features": [
+    "nfci_3m_chg",
+    "ebp_level",
+    "spx_12m_mom",
+    "infl_zscore_120m",
+    "lei_stress_dummy",
+    "ntfs_3m_chg"
+  ],
+  "signs": {
+    "nfci_3m_chg": 1,
+    "ebp_level": 1,
+    "spx_12m_mom": 1,
+    "infl_zscore_120m": 1,
+    "lei_stress_dummy": -1,
+    "ntfs_3m_chg": 1
+  },
+  "labels": {
+    "nfci_3m_chg": [
+      "NFCI financial conditions, 3m change",
+      "Fin. conditions"
+    ],
+    "ebp_level": [
+      "Excess bond premium, level",
+      "Credit"
+    ],
+    "spx_12m_mom": [
+      "S&P 500 12-month momentum",
+      "Trend"
+    ],
+    "infl_zscore_120m": [
+      "CPI inflation, 10yr z-score",
+      "Inflation"
+    ],
+    "lei_stress_dummy": [
+      "LEI stress (<-4%)",
+      "Leading"
+    ],
+    "ntfs_3m_chg": [
+      "Near-term forward spread, 3m change",
+      "Yield curve"
+    ]
+  },
+  "coef": [
+    0.3679815659742619,
+    1.1834940145538322,
+    0.5451175057157287,
+    0.5589628429460946,
+    -0.5225873733190799,
+    0.36327233719259683
+  ],
+  "intercept": -0.8445395910043684,
+  "mu": {
+    "nfci_3m_chg": -0.0016371134020618549,
+    "ebp_level": 0.06177530721649484,
+    "spx_12m_mom": 0.10500454226804125,
+    "infl_zscore_120m": -0.1628531257731958,
+    "lei_stress_dummy": 0.030927835051546393,
+    "ntfs_3m_chg": -0.013603711340206182
+  },
+  "sigma": {
+    "nfci_3m_chg": 0.27956978509032765,
+    "ebp_level": 0.575309349566178,
+    "spx_12m_mom": 0.1578243227925219,
+    "infl_zscore_120m": 1.2131975827088877,
+    "lei_stress_dummy": 0.17330097591339388,
+    "ntfs_3m_chg": 0.5562563970100204
+  },
+  "base_rate": 0.32783505154639175,
+  "min_w": 0.0,
+  "max_w": 1.0,
+  "model_type": "logistic",
+  "value_kind": "probability",
+  "unconstrained": true,
+  "train_start": "1986-01-31",
+  "hac_pvalues": {
+    "nfci_3m_chg": 0.04003545903668293,
+    "ebp_level": 5.497602142412461e-07,
+    "spx_12m_mom": 0.030513852068923653,
+    "infl_zscore_120m": 0.019189342697922385,
+    "lei_stress_dummy": 0.00722988341141706,
+    "ntfs_3m_chg": 0.01873409019237693
+  },
+  "hac_intercept_p": 8.6341936027301e-05,
+  "hac_maxlags": 6
+}

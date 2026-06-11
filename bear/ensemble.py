@@ -44,8 +44,24 @@ from bear.inference import (
     load_assessment,
 )
 
-MEMBERS = ["modela", "modelb", "modelc", "modeld"]
 COMMON_START = pd.Timestamp("2005-01-31")   # first month all four are out-of-sample
+
+# Ensemble families. Each is four era-trained members sharing a target.
+FAMILIES = {
+    "bear": {
+        "members": ["modela", "modelb", "modelc", "modeld"],
+        "target_col": "mdd_12m", "transform": "exceeds_20",
+        "params_file": "ensemble_params.json", "oos_file": "ensemble_oos.csv",
+    },
+    "correction": {
+        "members": ["corra", "corrb", "corrc", "corrd"],
+        "target_col": "mdd_6m", "transform": "exceeds_10",
+        "params_file": "correction_ensemble_params.json",
+        "oos_file": "correction_ensemble_oos.csv",
+    },
+}
+
+MEMBERS = FAMILIES["bear"]["members"]   # back-compat default (bear)
 
 
 def _logit(p, eps=1e-6):
@@ -53,23 +69,24 @@ def _logit(p, eps=1e-6):
     return np.log(p / (1 - p))
 
 
-def _target() -> pd.Series:
+def _target(family: str = "bear") -> pd.Series:
+    cfg = FAMILIES[family]
     tg = pd.read_csv(_DATA_DIR / "targets.csv", index_col=0, parse_dates=True)
-    return _apply_target_transform(tg["mdd_12m"], "exceeds_20")
+    return _apply_target_transform(tg[cfg["target_col"]], cfg["transform"])
 
 
-def member_oos() -> pd.DataFrame:
+def member_oos(family: str = "bear") -> pd.DataFrame:
     """Walk-forward OOS probability of each member, aligned on a union index."""
     cols = {}
-    for k in MEMBERS:
+    for k in FAMILIES[family]["members"]:
         s = pd.read_csv(_oos_path(k), index_col=0, parse_dates=True).iloc[:, 0]
         cols[k] = s
     return pd.DataFrame(cols).sort_index()
 
 
-def member_history() -> pd.DataFrame:
+def member_history(family: str = "bear") -> pd.DataFrame:
     """In-sample fitted probability of each member (for the production series)."""
-    cols = {k: load_assessment(k)["history"] for k in MEMBERS}
+    cols = {k: load_assessment(k)["history"] for k in FAMILIES[family]["members"]}
     return pd.DataFrame(cols).sort_index()
 
 
@@ -173,15 +190,17 @@ def platt_walkforward(p: pd.Series, y: pd.Series, start: pd.Timestamp,
 # Build + evaluate
 # ---------------------------------------------------------------------------
 
-def build_and_save() -> dict:
+def build_and_save(family: str = "bear") -> dict:
     """Compute the production ensemble series + summary and persist them."""
-    y = _target()
-    oos = member_oos()
-    hist = member_history()
+    cfg = FAMILIES[family]
+    members = cfg["members"]
+    y = _target(family)
+    oos = member_oos(family)
+    hist = member_history(family)
 
     # Production (in-sample) ensemble + current reading (all four available now)
     ens_hist = ensemble_equal(hist)
-    current = {k: float(load_assessment(k)["current_prob"]) for k in MEMBERS}
+    current = {k: float(load_assessment(k)["current_prob"]) for k in members}
     ens_current = float(np.mean(list(current.values())))
 
     # Honest OOS ensemble (equal weight, growing membership)
@@ -194,7 +213,7 @@ def build_and_save() -> dict:
     ens_oos_cal = platt_walkforward(ens_oos, y, COMMON_START)
 
     out = pd.DataFrame({"ensemble": ens_oos, "ensemble_calibrated": ens_oos_cal})
-    out.to_csv(_DATA_DIR / "ensemble_oos.csv")
+    out.to_csv(_DATA_DIR / cfg["oos_file"])
 
     # Per-member metadata + OOS skill (computed offline so the app needs no ML).
     from sklearn.metrics import roc_auc_score
@@ -206,7 +225,7 @@ def build_and_save() -> dict:
         return float(roc_auc_score(yy.values, ss.loc[idx].values)) if yy.nunique() > 1 else None
 
     members_meta = {}
-    for k in MEMBERS:
+    for k in members:
         am = load_assessment(k)
         spec = _SPECS[k]
         members_meta[k] = {
@@ -217,6 +236,7 @@ def build_and_save() -> dict:
             "n_factors": len(am["features"]),
             "categories": [am["labels"][f][1] for f in am["features"]],
             "current_prob": current[k],
+            "current_prob_calibrated": float(apply_platt(current[k], a, b)),
             "base_rate": float(am["base_rate"]),
             "oos_auc_native": _auc_on(oos[k]),
             "oos_auc_common": _auc_on(oos[k], COMMON_START),
@@ -230,7 +250,8 @@ def build_and_save() -> dict:
     }
 
     summary = {
-        "members": MEMBERS,
+        "family": family,
+        "members": members,
         "method": "equal_weight",
         "calibration": "platt",
         "platt_a": a,
@@ -243,19 +264,20 @@ def build_and_save() -> dict:
         "members_meta": members_meta,
         "metrics": metrics,
     }
-    with open(_DATA_DIR / "ensemble_params.json", "w") as fh:
+    with open(_DATA_DIR / cfg["params_file"], "w") as fh:
         json.dump(summary, fh, indent=2)
     return summary
 
 
-def evaluate() -> None:
-    y = _target()
-    oos = member_oos()
+def evaluate(family: str = "bear") -> None:
+    members = FAMILIES[family]["members"]
+    y = _target(family)
+    oos = member_oos(family)
 
     print("=" * 72)
     print("MEMBER OOS coverage")
     print("=" * 72)
-    for k in MEMBERS:
+    for k in members:
         s = oos[k].dropna()
         print(f"  {k:8s} {s.index[0].date()} -> {s.index[-1].date()}  (n={len(s)})")
 
@@ -266,12 +288,12 @@ def evaluate() -> None:
     common = oos.loc[oos.index >= COMMON_START].dropna()
     yc = y.reindex(common.index)
     member_auc = {}
-    for k in MEMBERS:
+    for k in members:
         member_auc[k] = _auc(yc, common[k])
         print(f"  member {k:8s} AUC={member_auc[k]:.4f}")
     eq = ensemble_equal(common)
     print(f"  ENSEMBLE equal-weight     AUC={_auc(yc, eq):.4f}")
-    w = {k: max(member_auc[k] - 0.5, 0.0) for k in MEMBERS}   # skill above chance
+    w = {k: max(member_auc[k] - 0.5, 0.0) for k in members}   # skill above chance
     aw = ensemble_auc_weighted(common, w)
     print(f"  ENSEMBLE AUC-weighted     AUC={_auc(yc, aw):.4f}   weights="
           f"{ {k: round(v/sum(w.values()),2) for k,v in w.items()} }")
@@ -296,9 +318,14 @@ def evaluate() -> None:
 
 
 if __name__ == "__main__":
-    s = build_and_save()
-    print("Saved ensemble_oos.csv + ensemble_params.json")
-    print(f"Current ensemble P(bear) = {s['current_ensemble_prob']:.4f}")
-    print(f"  members: { {k: round(v,3) for k,v in s['current_member_probs'].items()} }")
-    print()
-    evaluate()
+    import sys
+    fams = sys.argv[1:] or ["bear", "correction"]
+    for fam in fams:
+        s = build_and_save(fam)
+        print(f"[{fam}] saved {FAMILIES[fam]['oos_file']} + {FAMILIES[fam]['params_file']}")
+        print(f"  current ensemble (raw → calibrated) = "
+              f"{s['current_ensemble_prob']:.4f} → {s['current_ensemble_prob_calibrated']:.4f}")
+        print(f"  members: { {k: round(v,3) for k,v in s['current_member_probs'].items()} }")
+        print()
+        evaluate(fam)
+        print()

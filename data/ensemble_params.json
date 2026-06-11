@@ -1,4 +1,5 @@
 {
+  "family": "bear",
   "members": [
     "modela",
     "modelb",
@@ -32,6 +33,7 @@
         "Credit"
       ],
       "current_prob": 0.23768654410674564,
+      "current_prob_calibrated": 0.1920368651691208,
       "base_rate": 0.21769772905246673,
       "oos_auc_native": 0.6416447069513858,
       "oos_auc_common": 0.7684056007226739
@@ -49,6 +51,7 @@
         "Rates"
       ],
       "current_prob": 0.12811636610471733,
+      "current_prob_calibrated": 0.08040818636825275,
       "base_rate": 0.15485278080697928,
       "oos_auc_native": 0.7492784266344477,
       "oos_auc_common": 0.8716124661246614
@@ -67,6 +70,7 @@
         "Term"
       ],
       "current_prob": 0.10444338146059652,
+      "current_prob_calibrated": 0.06042790970218388,
       "base_rate": 0.16170763260025872,
       "oos_auc_native": 0.7887286324786325,
       "oos_auc_common": 0.8396567299006323
@@ -83,6 +87,7 @@
         "Credit"
       ],
       "current_prob": 0.09727910204757552,
+      "current_prob_calibrated": 0.054732000098624216,
       "base_rate": 0.1670103092783505,
       "oos_auc_native": 0.8985998193315267,
       "oos_auc_common": 0.8985998193315267

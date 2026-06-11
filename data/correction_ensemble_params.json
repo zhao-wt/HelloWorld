@@ -1,0 +1,98 @@
+{
+  "family": "correction",
+  "members": [
+    "corra",
+    "corrb",
+    "corrc",
+    "corrd"
+  ],
+  "method": "equal_weight",
+  "calibration": "platt",
+  "platt_a": -0.2529638520630528,
+  "platt_b": 0.8371415164524825,
+  "current_member_probs": {
+    "corra": 0.4092419071369069,
+    "corrb": 0.35667480088298187,
+    "corrc": 0.34833122661494165,
+    "corrd": 0.5176382026216085
+  },
+  "current_ensemble_prob": 0.4079715343141097,
+  "current_ensemble_prob_calibrated": 0.3624653791099394,
+  "as_of": "2026-06-30",
+  "common_oos_start": "2005-01-31",
+  "members_meta": {
+    "corra": {
+      "title": "Correction \u2014 Model A (1920s)",
+      "subtitle": ">10% drawdown within a 6-month rolling window",
+      "train_start": "1920-01-31",
+      "oos_start": "1950-01-31",
+      "n_factors": 2,
+      "categories": [
+        "Inflation",
+        "Credit"
+      ],
+      "current_prob": 0.4092419071369069,
+      "current_prob_calibrated": 0.3634829882873024,
+      "base_rate": 0.38449490994518404,
+      "oos_auc_native": 0.6159193493442343,
+      "oos_auc_common": 0.6413708690330477
+    },
+    "corrb": {
+      "title": "Correction \u2014 Model B (1950s)",
+      "subtitle": ">10% drawdown within a 6-month rolling window",
+      "train_start": "1950-01-31",
+      "oos_start": "1970-01-31",
+      "n_factors": 2,
+      "categories": [
+        "Inflation",
+        "Credit"
+      ],
+      "current_prob": 0.35667480088298187,
+      "current_prob_calibrated": 0.32153388457207205,
+      "base_rate": 0.33696837513631406,
+      "oos_auc_native": 0.6416547924384914,
+      "oos_auc_common": 0.641030871753026
+    },
+    "corrc": {
+      "title": "Correction \u2014 Model C (1960s)",
+      "subtitle": ">10% drawdown within a 6-month rolling window",
+      "train_start": "1962-01-31",
+      "oos_start": "1985-01-31",
+      "n_factors": 2,
+      "categories": [
+        "Credit",
+        "Yield curve"
+      ],
+      "current_prob": 0.34833122661494165,
+      "current_prob_calibrated": 0.3148945984923855,
+      "base_rate": 0.35058214747736094,
+      "oos_auc_native": 0.6219716422909457,
+      "oos_auc_common": 0.5854753161974704
+    },
+    "corrd": {
+      "title": "Correction \u2014 Model D (1980s)",
+      "subtitle": ">10% drawdown within a 6-month rolling window",
+      "train_start": "1986-01-31",
+      "oos_start": "2005-01-31",
+      "n_factors": 6,
+      "categories": [
+        "Fin. conditions",
+        "Credit",
+        "Trend",
+        "Inflation",
+        "Leading",
+        "Yield curve"
+      ],
+      "current_prob": 0.5176382026216085,
+      "current_prob_calibrated": 0.45168209185965696,
+      "base_rate": 0.32783505154639175,
+      "oos_auc_native": 0.6966544267645859,
+      "oos_auc_common": 0.6966544267645859
+    }
+  },
+  "metrics": {
+    "ensemble_auc_full": 0.613385709419179,
+    "ensemble_auc_common": 0.6909424724602203,
+    "realized_base_rate": 0.33696837513631406
+  }
+}

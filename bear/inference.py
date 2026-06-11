@@ -316,6 +316,70 @@ MODELD_SPEC = {
     "value_kind": "probability",
 }
 
+# ---------------------------------------------------------------------------
+# Correction ensemble members (mirror the bear ensemble: four era-trained,
+# unconstrained-logistic members, every coefficient HAC-significant, selected by
+# bear/search_ensemble.py). Target: 1{ mdd_6m <= -0.10 } (>10% drawdown within a
+# 6-month rolling window). They read from all_features.csv so a single member can
+# mix long-history and modern factors.
+# ---------------------------------------------------------------------------
+_CORR_LABELS = {
+    "infl_zscore_120m":   ("CPI inflation, 10yr z-score",        "Inflation"),
+    "baa_yield_chg6":     ("BAA corporate yield, 6m change",     "Credit"),
+    "ts_10y3m_inv_dummy": ("Yield-curve inversion (10y-3m<0)",   "Yield curve"),
+    "nfci_3m_chg":        ("NFCI financial conditions, 3m change", "Fin. conditions"),
+    "ebp_level":          ("Excess bond premium, level",         "Credit"),
+    "spx_12m_mom":        ("S&P 500 12-month momentum",          "Trend"),
+    "lei_stress_dummy":   ("LEI stress (<-4%)",                  "Leading"),
+    "ntfs_3m_chg":        ("Near-term forward spread, 3m change", "Yield curve"),
+}
+
+
+def _corr_spec(kind, title_era, features, signs, train_start, oos_start):
+    return {
+        "kind": kind,
+        "title": f"Correction — Model {title_era}",
+        "subtitle": ">10% drawdown within a 6-month rolling window",
+        "horizon": 6,
+        "features_csv": "all_features.csv",
+        "target_col": "mdd_6m",
+        "target_transform": "exceeds_10",
+        "features": features,
+        "signs": signs,
+        "labels": {f: _CORR_LABELS[f] for f in features},
+        "min_w": 0.0,
+        "max_w": 1.0,
+        "unconstrained": True,
+        "train_start": train_start,
+        "oos_start": oos_start,
+        "model_type": "logistic",
+        "value_kind": "probability",
+    }
+
+
+CORRA_SPEC = _corr_spec(
+    "corra", "A (1920s)",
+    ["infl_zscore_120m", "baa_yield_chg6"],
+    {"infl_zscore_120m": +1, "baa_yield_chg6": +1},
+    "1920-01-31", "1950-01-31")
+CORRB_SPEC = _corr_spec(
+    "corrb", "B (1950s)",
+    ["infl_zscore_120m", "baa_yield_chg6"],
+    {"infl_zscore_120m": +1, "baa_yield_chg6": +1},
+    "1950-01-31", "1970-01-31")
+CORRC_SPEC = _corr_spec(
+    "corrc", "C (1960s)",
+    ["baa_yield_chg6", "ts_10y3m_inv_dummy"],
+    {"baa_yield_chg6": +1, "ts_10y3m_inv_dummy": +1},
+    "1962-01-31", "1985-01-31")
+CORRD_SPEC = _corr_spec(
+    "corrd", "D (1980s)",
+    ["nfci_3m_chg", "ebp_level", "spx_12m_mom",
+     "infl_zscore_120m", "lei_stress_dummy", "ntfs_3m_chg"],
+    {"nfci_3m_chg": +1, "ebp_level": +1, "spx_12m_mom": +1,
+     "infl_zscore_120m": +1, "lei_stress_dummy": -1, "ntfs_3m_chg": +1},
+    "1986-01-31", "2005-01-31")
+
 _SPECS = {
     "bear": BEAR_SPEC,
     "correction": CORR_SPEC,
@@ -325,6 +389,10 @@ _SPECS = {
     "modelb": MODELB_SPEC,
     "modelc": MODELC_SPEC,
     "modeld": MODELD_SPEC,
+    "corra": CORRA_SPEC,
+    "corrb": CORRB_SPEC,
+    "corrc": CORRC_SPEC,
+    "corrd": CORRD_SPEC,
 }
 
 
