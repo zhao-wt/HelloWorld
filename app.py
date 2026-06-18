@@ -2517,6 +2517,339 @@ ENSEMBLE_UI = {
 }
 
 
+FORECAST_HORIZONS = ["1", "3", "6", "12"]
+FORECAST_HORIZON_LABELS = {"1": "1 Month", "3": "3 Months",
+                           "6": "6 Months", "12": "1 Year"}
+
+
+def render_forecast_history_chart(ens: pd.Series, realized: pd.Series,
+                                  horizon_label: str, years: int = 50) -> None:
+    """Line chart: ensemble forecast vs realized forward return over time."""
+    cutoff = pd.Timestamp.today() - pd.DateOffset(years=years)
+    df = pd.DataFrame({"Forecast": ens, "Realized": realized})
+    df = df[df.index >= cutoff].dropna(how="all").reset_index()
+    df.columns = ["date", "Forecast", "Realized"]
+    if df.empty:
+        st.info("No history available for the selected window.")
+        return
+    long = df.melt("date", value_vars=["Forecast", "Realized"],
+                   var_name="Series", value_name="Return")
+    color = alt.Color("Series:N",
+                      scale=alt.Scale(domain=["Forecast", "Realized"],
+                                      range=["#2563eb", "#9ca3af"]),
+                      legend=alt.Legend(title=None, orient="top"))
+    line = (
+        alt.Chart(long)
+        .mark_line(opacity=0.9)
+        .encode(
+            x=alt.X("date:T", title="Date",
+                    axis=alt.Axis(format="%Y", labelAngle=0)),
+            y=alt.Y("Return:Q", title=f"{horizon_label} return",
+                    axis=alt.Axis(format="%")),
+            color=color,
+            tooltip=[alt.Tooltip("date:T", title="Date", format="%Y-%m"),
+                     alt.Tooltip("Series:N"),
+                     alt.Tooltip("Return:Q", format=".1%")],
+        )
+    )
+    zero = (alt.Chart(pd.DataFrame({"y": [0.0]}))
+            .mark_rule(color="#6b7280", strokeDash=[4, 4]).encode(y="y:Q"))
+    st.altair_chart((zero + line).properties(height=300),
+                    use_container_width=True)
+
+
+def render_forecast_member_table(members: dict, ens_metrics: dict,
+                                 ens_current: float) -> None:
+    """HTML table: each model family's current forecast + OOS skill at a horizon."""
+    order = ["enet", "knn", "rf", "mlp", "mean"]
+    headers = ["Model", "Current forecast", "R² (OOS)", "Hit rate", "Corr", "n"]
+    header_html = "".join(f"<th>{h}</th>" for h in headers)
+    rows_html = []
+
+    def _row(label, cur, m, bold=False, shade=None):
+        cur_color = "#16a34a" if cur >= 0 else "#dc2626"
+        r2 = m.get("r2_oos", float("nan"))
+        r2cell = "—" if pd.isna(r2) else f"{r2:+.3f}"
+        r2color = "#16a34a" if (not pd.isna(r2) and r2 > 0) else "#6b7280"
+        hit = m.get("hit_rate", float("nan"))
+        hitcell = "—" if pd.isna(hit) else f"{hit:.0%}"
+        corr = m.get("corr", float("nan"))
+        corrcell = "—" if pd.isna(corr) else f"{corr:+.2f}"
+        bg = f"background:{shade};" if shade else ""
+        fw = "700" if bold else "400"
+        return (
+            f'<tr style="{bg}font-weight:{fw};">'
+            f'<td>{escape(label)}</td>'
+            f'<td style="text-align:right;color:{cur_color};font-weight:600;">{cur:+.2%}</td>'
+            f'<td style="text-align:right;color:{r2color};">{r2cell}</td>'
+            f'<td style="text-align:right;">{hitcell}</td>'
+            f'<td style="text-align:right;">{corrcell}</td>'
+            f'<td style="text-align:right;">{m.get("n", "—")}</td>'
+            f'</tr>'
+        )
+
+    rows_html.append(_row("Ensemble (equal-weight)", ens_current, ens_metrics,
+                          bold=True, shade="#eef2ff"))
+    for mk in order:
+        if mk not in members:
+            continue
+        m = members[mk]
+        label = m["label"] + (" — benchmark" if mk == "mean" else "")
+        rows_html.append(_row(label, m["current"], m))
+
+    table_html = f"""
+    <table style="width:100%;border-collapse:collapse;font-size:0.92rem;">
+      <thead><tr style="background:#f3f4f6;text-align:left;">{header_html}</tr></thead>
+      <tbody>{"".join(rows_html)}</tbody>
+    </table>
+    <style>table td, table th {{ border:1px solid #e5e7eb; padding:0.45rem 0.7rem; }}</style>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+def render_forecast_predictor_table(uni: pd.DataFrame) -> None:
+    """Formatted predictor leaderboard (univariate OOS skill by horizon)."""
+    disp = pd.DataFrame({
+        "Predictor": uni["Description"],
+        "Family": uni["Family"],
+        "Data since": uni["Data since"],
+    })
+    for h in FORECAST_HORIZONS:
+        disp[f"R² {h}m"] = uni[f"R2_OS_{h}m"].map(
+            lambda v: "—" if pd.isna(v) else f"{v:+.3f}")
+        disp[f"Hit {h}m"] = uni[f"hit_{h}m"].map(
+            lambda v: "—" if pd.isna(v) else f"{v:.0%}")
+    st.dataframe(disp, hide_index=True, use_container_width=True)
+
+
+def render_forecast_page() -> None:
+    """Market Forecast tab: ensemble point-forecast of S&P 500 return at
+    1 / 3 / 6 / 12 months, with member breakdown and predictor leaderboard."""
+    render_section_header(
+        "Market Forecast — Return Ensemble",
+        "Point forecast of the S&P 500 total price return over the next 1, 3, 6, "
+        "and 12 months. Each horizon is an equal-weight combination of four "
+        "model families (elastic net, k-nearest-neighbor, random forest, neural "
+        "net) trained on a shared macro / valuation / trend predictor set. "
+        "Forecasts are walk-forward out-of-sample; skill is measured against the "
+        "prevailing historical mean (Campbell-Thompson R²_OS).",
+    )
+
+    try:
+        params, oos = _load_ensemble_cached(
+            "forecast_params.json", "forecast_ensemble_oos.csv",
+            _mtime(DATA_DIR / "forecast_params.json"))
+    except Exception as exc:
+        st.error(
+            f"Could not load the market-forecast ensemble: {exc}\n\n"
+            "Run `python -m forecast.models` then `python -m forecast.ensemble` "
+            "to generate the artifacts."
+        )
+        return
+
+    by_h = params["by_horizon"]
+    as_of = params.get("as_of", "—")
+
+    # -- Headline: four horizon cards (cumulative forecast, annualized in help) --
+    cols = st.columns(4)
+    for i, h in enumerate(FORECAST_HORIZONS):
+        m = by_h[h]
+        f = m["current_forecast"]
+        ann = m["current_forecast_annualized"]
+        bench = m.get("benchmark_mean")
+        delta = (f - bench) if bench is not None else None
+        cols[i].metric(
+            f"{FORECAST_HORIZON_LABELS[h]} expected return",
+            f"{f:+.1%}",
+            delta=(f"{delta:+.1%} vs avg" if delta is not None else None),
+            help=f"Cumulative {h}-month forecast (annualized {ann:+.1%}). "
+                 f"Equal-weight ensemble of the four model families.",
+        )
+
+    st.caption(
+        "As of **" + str(as_of) + "**.  Out-of-sample R²_OS vs the prevailing mean: "
+        + " · ".join(
+            f"{FORECAST_HORIZON_LABELS[h]} **{by_h[h]['ensemble_metrics']['r2_oos']:+.3f}**"
+            for h in FORECAST_HORIZONS)
+        + ".  Positive R²_OS means the ensemble beats simply forecasting the "
+        "historical average. As the equity-premium literature (Welch-Goyal 2008) "
+        "shows, short-horizon return predictability is weak — value concentrates "
+        "at longer horizons and in combination, so read the 1-month number with "
+        "caution."
+    )
+
+    # -- Forecast vs realized chart (per-horizon selector) --
+    render_section_header(
+        "Forecast vs Realized — Out-of-Sample, Walk-Forward",
+        "Blue = the ensemble's expanding-window forecast (each model re-fit on "
+        "prior data only); grey = the return that subsequently realized.",
+    )
+    sel = st.radio("Horizon", options=FORECAST_HORIZONS,
+                   format_func=lambda h: FORECAST_HORIZON_LABELS[h],
+                   horizontal=True, key="forecast_horizon")
+    if f"ens_{sel}m" in oos.columns:
+        render_forecast_history_chart(
+            oos[f"ens_{sel}m"].dropna(), oos[f"real_{sel}m"],
+            FORECAST_HORIZON_LABELS[sel])
+
+    # -- Member breakdown for the selected horizon --
+    render_section_header(
+        "Ensemble Members",
+        "Current forecast and out-of-sample skill of each model family at the "
+        "selected horizon. The ensemble is their equal-weight average; the "
+        "prevailing-mean row is the benchmark each member is scored against.",
+    )
+    msel = by_h[sel]
+    render_forecast_member_table(
+        msel["members"], msel["ensemble_metrics"], msel["current_forecast"])
+
+    # -- Predictor leaderboard --
+    render_section_header(
+        "Predictor Leaderboard",
+        "Each row is a single-predictor linear forecast, walk-forward "
+        "out-of-sample. R² is the Campbell-Thompson out-of-sample R²_OS vs the "
+        "prevailing mean; Hit is the directional hit-rate. Grouped by family. "
+        "Return predictability is intrinsically weak, so members earn their place "
+        "in the ensemble by out-of-sample skill, not statistical significance.",
+    )
+    try:
+        uni = _load_univariate_cached(
+            "univariate_forecast.csv", _mtime(DATA_DIR / "univariate_forecast.csv"))
+        render_forecast_predictor_table(uni)
+    except Exception as exc:
+        st.info("Predictor leaderboard unavailable — run "
+                f"`python -m forecast.univariate` to generate it. ({exc})")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_json_cached(filename: str, mtime: float = 0.0) -> dict:
+    import json
+    with open(DATA_DIR / filename) as fh:
+        return json.load(fh)
+
+
+def _tilt_color(tilt: str) -> str:
+    return {"Overweight": "#16a34a", "Underweight": "#dc2626"}.get(tilt, "#6b7280")
+
+
+def _render_enet_betas(rows: list) -> None:
+    """One Elastic Net beta table (· = factor shrunk to exactly zero)."""
+    macro = ["oil", "dur", "unemp", "infl"]
+    cmax = {c: max((abs(r[c]) for r in rows), default=1.0) or 1.0 for c in macro}
+    hdr = "".join(f"<th>{h}</th>" for h in
+                  ["Sector", "Mkt β", "Oil", "Dur", "Unemp", "Infl", "R²"])
+
+    def cell(v, cm):
+        if abs(v) < 1e-9:
+            return "<td style='color:#c8c8c8;'>·</td>"
+        a = min(abs(v) / cm, 1.0) * 0.5
+        bg = f"rgba(34,197,94,{a:.2f})" if v > 0 else f"rgba(239,68,68,{a:.2f})"
+        return f"<td style='background:{bg};'>{v:+.2f}</td>"
+
+    body = []
+    for r in rows:
+        cells = "".join(cell(r[c], cmax[c]) for c in macro)
+        body.append(
+            f"<tr><td>{escape(r['sector'])}</td>"
+            f"<td style='font-weight:600;'>{r['mkt']:.2f}</td>"
+            f"{cells}<td>{r['r2']*100:.0f}%</td></tr>")
+    st.markdown(
+        f"<table style='width:100%;border-collapse:collapse;font-size:0.82rem;'>"
+        f"<thead><tr style='background:#f3f4f6;'>{hdr}</tr></thead>"
+        f"<tbody>{''.join(body)}</tbody></table>"
+        f"<style>table td, table th {{ border:1px solid #e5e7eb; padding:0.3rem 0.45rem; text-align:center; }}</style>",
+        unsafe_allow_html=True)
+
+
+def render_sector_rotation_page() -> None:
+    """Sector Rotation tab: (1) cross-sectional momentum tilt — the one model that
+    survived every leak-free test — and (2) descriptive factor-risk betas."""
+    render_section_header(
+        "Sector Rotation",
+        "Two independent views of the 11 GICS sectors. The tilt is the only "
+        "return signal that held up out-of-sample in testing — 12-month "
+        "cross-sectional price momentum (best at a ~6-month horizon). The factor "
+        "panel below is descriptive RISK analysis (current betas), not a forecast.",
+    )
+    try:
+        p = _load_json_cached("sector_rotation_params.json",
+                              _mtime(DATA_DIR / "sector_rotation_params.json"))
+    except Exception as exc:
+        st.error(f"Could not load sector-rotation artifacts: {exc}\n\n"
+                 "Run `python -m forecast.sector_rotation` to generate them.")
+        return
+
+    mo = p["momentum"]
+    st.caption(f"As of **{p['as_of']}**.  Tilt signal: {mo['signal']} "
+               f"(forecast horizon {mo['forecast_horizon']}).")
+
+    # ---- Momentum ranking + tilt ----
+    headers = ["Rank", "Sector", "ETF", "12m return", "Momentum z", "Tilt", "Weight"]
+    hrow = "".join(f"<th>{h}</th>" for h in headers)
+    body = []
+    for r in mo["ranking"]:
+        c = _tilt_color(r["tilt"])
+        body.append(
+            f"<tr><td>{r['rank']}</td>"
+            f"<td>{escape(r['sector'])}</td><td>{escape(r['ticker'])}</td>"
+            f"<td>{r['mom_12m']:+.1%}</td>"
+            f"<td>{r['score']:+.2f}</td>"
+            f"<td style='background:{c};color:white;font-weight:600;'>{r['tilt']}</td>"
+            f"<td>{r['weight']:+.2f}</td></tr>")
+    st.markdown(
+        f"<table style='width:100%;border-collapse:collapse;font-size:0.92rem;'>"
+        f"<thead><tr style='background:#f3f4f6;'>{hrow}</tr></thead>"
+        f"<tbody>{''.join(body)}</tbody></table>"
+        f"<style>table td, table th {{ border:1px solid #e5e7eb; padding:0.4rem 0.65rem; text-align:center; }}</style>",
+        unsafe_allow_html=True)
+
+    s = mo.get("stats", {})
+    if s:
+        st.caption(
+            f"Signal skill at {s['horizon']} (walk-forward, no look-ahead): rank "
+            f"**IC {s['ic_full']:+.3f}** full-period · **{s['ic_test']:+.3f}** since 2020; "
+            f"rank-weighted long/short info ratio **{s['ls_ir_full']:.2f}**. A real but "
+            f"**modest** edge — best used as an overweight/underweight overlay, not a "
+            f"standalone strategy. Weight = rank-weighted dollar-neutral tilt "
+            f"(positive = overweight, negative = underweight)."
+        )
+
+    # ---- Factor-risk betas (Elastic Net, two windows) ----
+    render_section_header(
+        "Factor Risk — Sector Betas (Elastic Net, descriptive)",
+        "Each sector's monthly return regressed on five factors with Elastic Net, "
+        "which shrinks weak exposures to exactly zero (· = dropped). Natural units: "
+        "Market β is dimensionless (~1 = moves with the S&P); the others are % sector "
+        "return per +1% crude oil (Oil), +1pp in the 10y yield (Dur), +1pp in the "
+        "unemployment rate (Unemp), and +1pp in CPI inflation (Infl). The two windows "
+        "show how exposures migrate over time.",
+    )
+    try:
+        lasso = _load_json_cached("factor_lasso_params.json",
+                                  _mtime(DATA_DIR / "factor_lasso_params.json"))
+    except Exception as exc:
+        st.info("Regularized factor betas unavailable — run "
+                f"`python -m forecast.factor_lasso`. ({exc})")
+        return
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Full history** (inception → today)")
+        _render_enet_betas(lasso["full"]["enet"])
+    with c2:
+        st.markdown("**Post-pandemic** (2020 → today)")
+        _render_enet_betas(lasso["postcovid"]["enet"])
+    st.caption(
+        "Migration: **Market β** and **Energy↔oil** are stable across both windows "
+        "(structural). The macro factors mostly switched on after 2020 — growth "
+        "(**Technology, Semiconductors**) picked up negative **Duration** and "
+        "**Inflation** betas (long-duration behavior, absent full-history); "
+        "**Energy/Financials** strengthened positive rate betas; **Real Estate / "
+        "Utilities** stay rate-negative in both (true bond proxies). · = the "
+        "regularizer judged that exposure too weak to keep. Descriptive risk only — "
+        "independent of the momentum tilt above."
+    )
+
+
 def render_ensemble_page(family: str, title: str, caption: str) -> None:
     """Primary ensemble page (bear or correction): calibrated probability +
     per-member breakdown + walk-forward history + univariate leaderboard."""
@@ -3437,12 +3770,14 @@ with header_title:
     )
 
 (dashboard_tab, tracker_tab, allocation_tab, performance_tab,
- correction_tab, bear_tab) = st.tabs(
+ forecast_tab, rotation_tab, correction_tab, bear_tab) = st.tabs(
     [
         "Dashboard",
         "Indicator Tracker",
         "Conditional Asset Allocation",
         "Historical Performance",
+        "Market Forecast",
+        "Sector Rotation",
         "Correction Model",
         "Bear Model",
     ]
@@ -3705,6 +4040,12 @@ with performance_tab:
         render_panel("Risk Profile", "Volatility, drawdown, and downside-capture analytics.")
     with perf_cols[2]:
         render_panel("Attribution", "Cycle-stage and asset-class contribution analysis.")
+
+with forecast_tab:
+    render_forecast_page()
+
+with rotation_tab:
+    render_sector_rotation_page()
 
 with correction_tab:
     render_ensemble_page(

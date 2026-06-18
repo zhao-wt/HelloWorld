@@ -1,0 +1,240 @@
+{
+  "as_of": "2026-06-30",
+  "universe_start": "2004-09-30",
+  "momentum": {
+    "signal": "12-month cross-sectional price momentum",
+    "forecast_horizon": "6 months",
+    "ranking": [
+      {
+        "sector": "Semiconductors",
+        "ticker": "SMH",
+        "score": 2.723,
+        "mom_12m": 1.5059,
+        "rank": 1,
+        "tilt": "Overweight",
+        "weight": 0.333
+      },
+      {
+        "sector": "Technology",
+        "ticker": "XLK",
+        "score": 0.777,
+        "mom_12m": 0.664,
+        "rank": 2,
+        "tilt": "Overweight",
+        "weight": 0.267
+      },
+      {
+        "sector": "Energy",
+        "ticker": "XLE",
+        "score": 0.225,
+        "mom_12m": 0.4252,
+        "rank": 3,
+        "tilt": "Overweight",
+        "weight": 0.2
+      },
+      {
+        "sector": "Industrials",
+        "ticker": "XLI",
+        "score": -0.229,
+        "mom_12m": 0.2286,
+        "rank": 4,
+        "tilt": "Overweight",
+        "weight": 0.133
+      },
+      {
+        "sector": "Materials",
+        "ticker": "XLB",
+        "score": -0.276,
+        "mom_12m": 0.2081,
+        "rank": 5,
+        "tilt": "Neutral",
+        "weight": 0.067
+      },
+      {
+        "sector": "Health Care",
+        "ticker": "XLV",
+        "score": -0.417,
+        "mom_12m": 0.147,
+        "rank": 6,
+        "tilt": "Neutral",
+        "weight": 0.0
+      },
+      {
+        "sector": "Cons. Disc.",
+        "ticker": "XLY",
+        "score": -0.434,
+        "mom_12m": 0.1396,
+        "rank": 7,
+        "tilt": "Neutral",
+        "weight": -0.067
+      },
+      {
+        "sector": "Utilities",
+        "ticker": "XLU",
+        "score": -0.491,
+        "mom_12m": 0.1153,
+        "rank": 8,
+        "tilt": "Underweight",
+        "weight": -0.133
+      },
+      {
+        "sector": "Real Estate",
+        "ticker": "VNQ",
+        "score": -0.494,
+        "mom_12m": 0.114,
+        "rank": 9,
+        "tilt": "Underweight",
+        "weight": -0.2
+      },
+      {
+        "sector": "Cons. Staples",
+        "ticker": "XLP",
+        "score": -0.691,
+        "mom_12m": 0.0286,
+        "rank": 10,
+        "tilt": "Underweight",
+        "weight": -0.267
+      },
+      {
+        "sector": "Financials",
+        "ticker": "XLF",
+        "score": -0.693,
+        "mom_12m": 0.0278,
+        "rank": 11,
+        "tilt": "Underweight",
+        "weight": -0.333
+      }
+    ],
+    "stats": {
+      "ic_full": 0.08040837819224449,
+      "ic_test": 0.1384082858212266,
+      "ls_ret_full": 0.005015791918402024,
+      "ls_ir_full": 0.055462684273586166,
+      "horizon": "6m",
+      "signal": "12-month price momentum"
+    }
+  },
+  "factor_risk": {
+    "window": "2021-04-30 \u2192 2026-05-31",
+    "window_months": 60,
+    "factors": {
+      "mkt": "Market beta \u2014 sensitivity to the S&P 500 (SPY); ~1.0 = moves with the market",
+      "oil": "Commodity \u2014 % sector return per +1% move in crude oil (USO)",
+      "dur": "Duration \u2014 % sector return per +1 percentage-point in the 10y Treasury yield",
+      "emp": "Employment \u2014 % sector return per +1 percentage-point in the employment rate",
+      "infl": "Inflation \u2014 % sector return per +1 percentage-point in CPI inflation (YoY)"
+    },
+    "betas": [
+      {
+        "sector": "Health Care",
+        "ticker": "XLV",
+        "beta_mkt": 0.58,
+        "beta_oil": -0.031,
+        "beta_dur": -7.77,
+        "beta_emp": 3.93,
+        "beta_infl": -0.04,
+        "r2": 0.486
+      },
+      {
+        "sector": "Cons. Staples",
+        "ticker": "XLP",
+        "beta_mkt": 0.48,
+        "beta_oil": -0.019,
+        "beta_dur": -6.61,
+        "beta_emp": 0.66,
+        "beta_infl": -1.33,
+        "r2": 0.387
+      },
+      {
+        "sector": "Utilities",
+        "ticker": "XLU",
+        "beta_mkt": 0.59,
+        "beta_oil": 0.015,
+        "beta_dur": -8.09,
+        "beta_emp": 2.22,
+        "beta_infl": -0.05,
+        "r2": 0.36
+      },
+      {
+        "sector": "Energy",
+        "ticker": "XLE",
+        "beta_mkt": 0.41,
+        "beta_oil": 0.408,
+        "beta_dur": -1.27,
+        "beta_emp": -0.52,
+        "beta_infl": 2.59,
+        "r2": 0.393
+      },
+      {
+        "sector": "Materials",
+        "ticker": "XLB",
+        "beta_mkt": 0.92,
+        "beta_oil": 0.017,
+        "beta_dur": -9.94,
+        "beta_emp": 3.63,
+        "beta_infl": -0.28,
+        "r2": 0.588
+      },
+      {
+        "sector": "Industrials",
+        "ticker": "XLI",
+        "beta_mkt": 0.98,
+        "beta_oil": -0.003,
+        "beta_dur": -8.97,
+        "beta_emp": -2.23,
+        "beta_infl": -1.28,
+        "r2": 0.747
+      },
+      {
+        "sector": "Cons. Disc.",
+        "ticker": "XLY",
+        "beta_mkt": 1.21,
+        "beta_oil": -0.065,
+        "beta_dur": -10.33,
+        "beta_emp": 1.06,
+        "beta_infl": -0.11,
+        "r2": 0.747
+      },
+      {
+        "sector": "Financials",
+        "ticker": "XLF",
+        "beta_mkt": 0.87,
+        "beta_oil": 0.035,
+        "beta_dur": -7.22,
+        "beta_emp": 0.31,
+        "beta_infl": 1.14,
+        "r2": 0.619
+      },
+      {
+        "sector": "Real Estate",
+        "ticker": "VNQ",
+        "beta_mkt": 1.0,
+        "beta_oil": -0.015,
+        "beta_dur": -13.55,
+        "beta_emp": 1.55,
+        "beta_infl": 0.65,
+        "r2": 0.756
+      },
+      {
+        "sector": "Technology",
+        "ticker": "XLK",
+        "beta_mkt": 1.32,
+        "beta_oil": -0.058,
+        "beta_dur": -11.34,
+        "beta_emp": -0.34,
+        "beta_infl": -1.16,
+        "r2": 0.803
+      },
+      {
+        "sector": "Semiconductors",
+        "ticker": "SMH",
+        "beta_mkt": 1.68,
+        "beta_oil": -0.04,
+        "beta_dur": -15.9,
+        "beta_emp": 0.53,
+        "beta_infl": -2.24,
+        "r2": 0.659
+      }
+    ]
+  }
+}

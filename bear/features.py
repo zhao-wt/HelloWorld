@@ -143,7 +143,7 @@ def build_bear_features(p: pd.DataFrame) -> pd.DataFrame:
       ntfs_3m_chg       NTFS 3-month change                       sign: -
       ts_10y3m          10y-3m term spread level                  sign: -
       ts_inv_dummy      Inversion dummy (T10Y3M < 0)              sign: +
-      ts_10y2y          10y-2y term spread (secondary)            sign: -1
+      ts_10y2y          10y-2y term spread (secondary)            sig
 
     Credit  (Gilchrist-Zakrajšek 2012; Tokic-Jackson 2023)
       ebp_level         Excess bond premium level                 sign: +
